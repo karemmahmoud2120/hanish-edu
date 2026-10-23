@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Exclude local AI Studio configuration and tests
+public/assets/aistudio/config_c2c02d89.php
+public/assets/aistudio/groq_test_1b82bfd0.php
+public/assets/aistudio/actions_9f83a629.php
+public/assets/aistudio/ai_test_0e9843e8.php
+public/assets/aistudio/groq_test_1b82bfd0.php

@@ -1,0 +1,8 @@
+{
+  "name": "منصة عائلة حنيش التعليمية",
+  "description": "منظومة تعليمية عصرية متكاملة للمناهج المصرية مدعومة بمستر يونس وروبوت Gemini واستوديو الرسوم التوضيحية",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

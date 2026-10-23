@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Cairo', 'Tajawal', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+/* Custom scrollbar for chat and code panels */
+.custom-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
