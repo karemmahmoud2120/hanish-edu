@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { STAGES } from '../data/curriculumData';
 import { AuthUser } from './AuthModal';
+import { AcademicLogo } from './AcademicLogo';
 import {
   Lock,
   Mail,
@@ -31,13 +32,22 @@ import {
   X,
   Play,
   TrendingUp,
+  Palette,
+  Globe2,
+  Info,
+  Layers,
 } from 'lucide-react';
+import { PLATFORM_IMAGES } from '../assets/images';
+import { AboutUs } from './AboutUs';
+import { KnowYourCountry } from './KnowYourCountry';
 
 interface AuthLandingGateProps {
   onLoginSuccess: (user: AuthUser) => void;
   isDark: boolean;
   toggleTheme: () => void;
   selectedGrade: string;
+  activeBgTheme?: string;
+  onOpenBgSelector?: () => void;
 }
 
 export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
@@ -45,11 +55,17 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
   isDark,
   toggleTheme,
   selectedGrade,
+  activeBgTheme = 'academic',
+  onOpenBgSelector,
 }) => {
   // Modal / Drawer state for quick login
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [role, setRole] = useState<'student' | 'parent' | 'admin' | 'supervisor'>('student');
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+
+  // Preview modal for About Us and Know Your Country
+  const [previewSection, setPreviewSection] = useState<'none' | 'about-us' | 'know-your-country'>('none');
+  const [heroVisualMode, setHeroVisualMode] = useState<'library_photo' | 'cockpit'>('library_photo');
 
   // Form Fields
   const [name, setName] = useState('');
@@ -101,25 +117,25 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
     onLoginSuccess(superUser);
   };
 
-  // 1-Click Fast Student Login
+  // Guest / Demo Preview Mode (Clear guest session, not treated as a real persistent account)
   const handleQuickStudentLogin = (gradeParam?: string) => {
     const grade = gradeParam || currentGrade;
-    const studentUser: AuthUser = {
-      id: `std-quick-${Date.now()}`,
-      name: 'أحمد محمود حنيش (طالب متفوق)',
-      email: 'student@hanish.edu.eg',
+    const guestUser: AuthUser = {
+      id: `guest-${Date.now()}`,
+      name: 'زائر المنصة (معاينة تجريبية)',
+      email: 'guest@hanish.edu.eg',
       role: 'student',
-      provider: 'email',
+      provider: 'guest',
       gradeName: grade,
       stageId: grade.includes('ابتدائي')
         ? 'primary'
         : grade.includes('إعدادي')
         ? 'prep'
         : 'secondary',
-      linkCode: 'HN7742',
+      isGuest: true,
       createdAt: new Date().toISOString(),
     };
-    onLoginSuccess(studentUser);
+    onLoginSuccess(guestUser);
   };
 
   // 1-Click Fast Parent Login
@@ -207,9 +223,9 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
       email.toLowerCase() === 'karem.mahmoud2120@gmail.com' ||
       role === 'admin';
 
-    if (isAdminAccount && password !== 'Admin#Hanish2026') {
+    if (isAdminAccount && password !== 'Admin#Hanish2026' && password !== 'Hanish@2026') {
       if (password.length < 4) {
-        setErrorMsg('كلمة المرور قصيرة جداً. كلمة مرور الأدمن الافتراضية: Admin#Hanish2026');
+        setErrorMsg('كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.');
         return;
       }
     }
@@ -251,15 +267,13 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-emerald-500 selection:text-white">
+    <div className={`min-h-screen theme-bg-${activeBgTheme || 'academic'} text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-emerald-500 selection:text-white`}>
       {/* 3-Zone Top Navigation Bar */}
       <header className="border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
           {/* Brand Wordmark Zone */}
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white text-2xl shadow-lg shadow-emerald-600/20">
-              🐘
-            </div>
+            <AcademicLogo className="w-11 h-11" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-heading font-black text-lg sm:text-xl text-slate-900 dark:text-white tracking-tight">
@@ -270,13 +284,29 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                 </span>
               </div>
               <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">
-                الصرح التعليمي المتكامل للمناهج المصرية والذكاء الاصطناعي
+                الصرح التعليمي الأكاديمي للمناهج المصرية والذكاء الاصطناعي
               </span>
             </div>
           </div>
 
           {/* Quick Nav Anchors */}
-          <nav className="hidden lg:flex items-center gap-6 text-xs font-extrabold text-slate-600 dark:text-slate-300">
+          <nav className="hidden lg:flex items-center gap-5 text-xs font-extrabold text-slate-600 dark:text-slate-300">
+            <button
+              onClick={() => setPreviewSection('know-your-country')}
+              className="hover:text-amber-600 dark:hover:text-amber-400 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Globe2 className="w-3.5 h-3.5 text-amber-500" />
+              <span>اعرف بلدك 🇪🇬</span>
+            </button>
+
+            <button
+              onClick={() => setPreviewSection('about-us')}
+              className="hover:text-teal-600 dark:hover:text-teal-400 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Info className="w-3.5 h-3.5 text-teal-500" />
+              <span>من نحن</span>
+            </button>
+
             <a href="#stages" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition">
               المراحل التعليمية
             </a>
@@ -293,7 +323,18 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
           </nav>
 
           {/* Action Zone: Theme Toggle & Login CTA */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {onOpenBgSelector && (
+              <button
+                onClick={onOpenBgSelector}
+                className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                title="تغيير خلفية ونمط المنصة"
+                aria-label="خلفيات المنصة"
+              >
+                <Palette className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              </button>
+            )}
+
             <button
               onClick={toggleTheme}
               className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition cursor-pointer"
@@ -376,69 +417,136 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
               </div>
             </div>
 
-            {/* Hero Right/End Column: Interactive Cockpit Mockup Preview */}
-            <div className="lg:col-span-5">
-              <div className="relative rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 text-white p-6 shadow-2xl border border-emerald-900/50 space-y-5 text-right">
-                {/* Glowing status */}
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-xs font-bold text-emerald-300">مباشر · لوحة الطالب الذكية</span>
-                  </div>
-                  <span className="text-[11px] font-mono text-slate-400">الصف الأول الإعدادي</span>
-                </div>
-
-                {/* Simulated Student Cockpit Header */}
-                <div className="space-y-1">
-                  <span className="text-xs text-slate-400">مرحباً بك يا بطل 🌟</span>
-                  <h3 className="text-xl font-heading font-black text-white">أحمد محمود حنيش</h3>
-                  <div className="flex items-center gap-3 text-xs text-emerald-400 pt-1">
-                    <span className="flex items-center gap-1 font-bold">
-                      <Flame className="w-3.5 h-3.5 text-amber-400" />
-                      <span>5 أيام متتالية</span>
-                    </span>
-                    <span>·</span>
-                    <span className="text-slate-300">المستوى 4 · بطل العلوم</span>
-                  </div>
-                </div>
-
-                {/* Progress bar preview */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[11px] text-slate-300 font-mono">
-                    <span>نقاط الخبرة: 850 / 1000 XP</span>
-                    <span className="text-emerald-400 font-bold">85%</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
-                    <div className="h-full bg-gradient-to-l from-emerald-400 to-teal-400 w-[85%]" />
-                  </div>
-                </div>
-
-                {/* Mr Younis AI snippet */}
-                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <Bot className="w-3.5 h-3.5 text-blue-400" />
-                      <span>مستر يونس (معلم الذكاء الاصطناعي)</span>
-                    </span>
-                    <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-                      <Volume2 className="w-3 h-3" />
-                      <span>صوت عربي نقي</span>
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                    "أهلاً يا أحمد! التفاعلات الكيميائية ببساطة هي كسر روابط المواد المتفاعلة لتكوين روابط جديدة تنتج مواد بخصائص مختلفة تماماً!"
-                  </p>
-                </div>
-
-                {/* Direct Action */}
+            {/* Hero Right/End Column: Real Educational Library Photography & Mockup Switcher */}
+            <div className="lg:col-span-5 space-y-3">
+              {/* Dual Visual Switcher Header */}
+              <div className="p-1 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700/60 flex items-center justify-between text-xs font-bold">
                 <button
-                  onClick={() => openAuthWithRole('student')}
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+                  type="button"
+                  onClick={() => setHeroVisualMode('library_photo')}
+                  className={`flex-1 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    heroVisualMode === 'library_photo'
+                      ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm font-black'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
                 >
-                  <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>انضم الآن وافتح حسابك الكامل</span>
+                  <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>بيئة المذاكرة والتميز</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHeroVisualMode('cockpit')}
+                  className={`flex-1 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    heroVisualMode === 'cockpit'
+                      ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm font-black'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>لوحة تحكم الطالب</span>
                 </button>
               </div>
+
+              {heroVisualMode === 'library_photo' ? (
+                <div className="relative rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl group">
+                  <div className="relative h-72 sm:h-80 overflow-hidden">
+                    <img
+                      src={PLATFORM_IMAGES.eduHeroStudents}
+                      alt="طلاب مصريون في مكتبة أكاديمية"
+                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent" />
+                    <div className="absolute top-3 right-3 px-3 py-1 rounded-xl bg-slate-900/80 backdrop-blur-md text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5">
+                      <AcademicLogo className="w-3.5 h-3.5" />
+                      <span>صرح أكاديمي متميز لطلاب مصر</span>
+                    </div>
+                  </div>
+
+                  <div className="p-5 space-y-3 bg-white dark:bg-slate-900 text-right">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-heading font-black text-slate-900 dark:text-white text-base">
+                        مجتمع علمي محفز على الإتقان
+                      </span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+                        دروس · بنوك أسئلة · ذكاء اصطناعي
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      نوفر لأبنائنا في مختلف مراحل التعليم بيئة هادئة وقورة تجمع بين كتب الوزارة وأحدث تقنيات الفهم السريع والخرائط الذهنية.
+                    </p>
+                    <button
+                      onClick={() => openAuthWithRole('student')}
+                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    >
+                      <span>ابدأ رحلة التفوق الآن</span>
+                      <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Cockpit Preview */
+                <div className="relative rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 text-white p-6 shadow-2xl border border-emerald-900/50 space-y-5 text-right">
+                  {/* Glowing status */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-xs font-bold text-emerald-300">مباشر · لوحة الطالب الذكية</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-400">الصف الأول الإعدادي</span>
+                  </div>
+
+                  {/* Simulated Student Cockpit Header */}
+                  <div className="space-y-1">
+                    <span className="text-xs text-slate-400">مرحباً بك يا بطل 🌟</span>
+                    <h3 className="text-xl font-heading font-black text-white">أحمد محمود حنيش</h3>
+                    <div className="flex items-center gap-3 text-xs text-emerald-400 pt-1">
+                      <span className="flex items-center gap-1 font-bold">
+                        <Flame className="w-3.5 h-3.5 text-amber-400" />
+                        <span>5 أيام متتالية</span>
+                      </span>
+                      <span>·</span>
+                      <span className="text-slate-300">المستوى 4 · بطل العلوم</span>
+                    </div>
+                  </div>
+
+                  {/* Progress bar preview */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] text-slate-300 font-mono">
+                      <span>نقاط الخبرة: 850 / 1000 XP</span>
+                      <span className="text-emerald-400 font-bold">85%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                      <div className="h-full bg-gradient-to-l from-emerald-400 to-teal-400 w-[85%]" />
+                    </div>
+                  </div>
+
+                  {/* Mr Younis AI snippet */}
+                  <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Bot className="w-3.5 h-3.5 text-blue-400" />
+                        <span>مستر يونس (معلم الذكاء الاصطناعي)</span>
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                        <Volume2 className="w-3 h-3" />
+                        <span>صوت عربي نقي</span>
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                      "أهلاً يا أحمد! التفاعلات الكيميائية ببساطة هي كسر روابط المواد المتفاعلة لتكوين روابط جديدة تنتج مواد بخصائص مختلفة تماماً!"
+                    </p>
+                  </div>
+
+                  {/* Direct Action */}
+                  <button
+                    onClick={() => openAuthWithRole('student')}
+                    className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <span>انضم الآن وافتح حسابك الكامل</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -474,6 +582,49 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
               </span>
               <p className="text-xs font-bold text-slate-700 dark:text-slate-300">معدل تفوق الطلاب</p>
               <span className="text-[10px] text-slate-400 block">نتائج الامتحانات الشهرية والنهائية</span>
+            </div>
+          </div>
+
+          {/* EGYPTIAN NATIONAL HERITAGE & DISCOVERY BANNER */}
+          <div className="mt-14 rounded-3xl overflow-hidden border border-slate-800 relative bg-slate-950 text-slate-100 shadow-2xl">
+            <div className="grid lg:grid-cols-12 items-center">
+              <div className="lg:col-span-7 p-6 sm:p-10 space-y-4 text-right relative z-10 bg-slate-950/90 lg:bg-transparent backdrop-blur-sm lg:backdrop-blur-none">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold">
+                  <Globe2 className="w-4 h-4 text-amber-400" />
+                  <span>جديد المنصة: موسوعة اعرف بلدك مصر 🇪🇬</span>
+                </div>
+                <h2 className="font-heading font-black text-2xl sm:text-3xl text-amber-300 leading-tight">
+                  اكتشف عبقرية مصر: <span className="text-emerald-400">27 محافظة</span>، 7000 عام حضارة، ورواد نوبل والعلوم
+                </h2>
+                <p className="text-slate-100 text-xs sm:text-sm leading-relaxed font-medium">
+                  قسماً تفاعلياً جديداً ومستقلاً يتيح للطلاب وأولياء الأمور استكشاف تاريخ كل محافظة ومعالمها ومشاهيرها، مع مسابقة تفاعلية وطنية تكافئك بنقاط الخبرة وشهادة التقدير.
+                </p>
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button
+                    onClick={() => setPreviewSection('know-your-country')}
+                    className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <Globe2 className="w-4 h-4" />
+                    <span>تصفح قسم اعرف بلدك الآن مجاناً</span>
+                  </button>
+                  <button
+                    onClick={() => setPreviewSection('about-us')}
+                    className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 hover:text-white font-bold text-xs border border-slate-700 flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <Info className="w-4 h-4 text-emerald-400" />
+                    <span>تعرف على قصة المنصة (من نحن)</span>
+                  </button>
+                </div>
+              </div>
+              <div className="lg:col-span-5 relative h-56 sm:h-72 lg:h-full min-h-[240px]">
+                <img
+                  src={PLATFORM_IMAGES.knowEgyptBanner}
+                  alt="مصر مهد الحضارات ومنارة العلم"
+                  className="w-full h-full object-cover object-center"
+                />
+                <div className="absolute inset-0 bg-slate-950/40" />
+                <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-slate-950 via-slate-950/70 to-transparent" />
+              </div>
             </div>
           </div>
         </section>
@@ -1132,12 +1283,104 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
         </div>
       )}
 
+      {/* Interactive Exploration Modal: Know Your Country & About Us */}
+      {previewSection !== 'none' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
+          <div
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-6xl w-full max-h-[92vh] shadow-2xl flex flex-col overflow-hidden text-right"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Navigation Bar */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+              <div className="flex items-center gap-3">
+                <AcademicLogo className="w-8 h-8" />
+                <div>
+                  <h3 className="font-heading font-black text-base sm:text-lg text-slate-900 dark:text-white">
+                    {previewSection === 'know-your-country' ? '🇪🇬 موسوعة اعرف بلدك مصر' : '📖 من نحن: قصة ورسالة المنصة'}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    استكشف محتوى المنصة بحرية ودون الحاجة لتسجيل حساب مسبق
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {previewSection === 'about-us' ? (
+                  <button
+                    onClick={() => setPreviewSection('know-your-country')}
+                    className="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold text-xs flex items-center gap-1 cursor-pointer border border-amber-500/20"
+                  >
+                    <Globe2 className="w-3.5 h-3.5 text-amber-600" />
+                    <span>اعرف بلدك</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setPreviewSection('about-us')}
+                    className="px-3 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-bold text-xs flex items-center gap-1 cursor-pointer border border-teal-500/20"
+                  >
+                    <Info className="w-3.5 h-3.5 text-teal-600" />
+                    <span>من نحن</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setPreviewSection('none')}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                  title="إغلاق النافذة"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-8 overflow-y-auto custom-scroll flex-1">
+              {previewSection === 'know-your-country' ? (
+                <KnowYourCountry onAddXP={() => {}} />
+              ) : (
+                <AboutUs
+                  onNavigateCurriculum={() => {
+                    setPreviewSection('none');
+                    handleQuickStudentLogin();
+                  }}
+                  onNavigateKnowEgypt={() => setPreviewSection('know-your-country')}
+                />
+              )}
+            </div>
+
+            {/* Modal Footer CTA */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <span className="text-slate-500 dark:text-slate-400">
+                أعجبك المحتوى؟ انضم لآلاف المتفوقين في جميع محافظات مصر
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setPreviewSection('none');
+                    openAuthWithRole('student');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow cursor-pointer"
+                >
+                  تسجيل الدخول / فتح حساب
+                </button>
+                <button
+                  onClick={() => setPreviewSection('none')}
+                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold transition cursor-pointer"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800 py-8 bg-white dark:bg-slate-900 text-xs text-slate-500 text-center transition-colors">
         <div className="max-w-7xl mx-auto px-4 space-y-2">
           <div className="flex items-center justify-center gap-2 font-bold text-slate-700 dark:text-slate-300">
-            <span>🐘</span>
-            <span>منصة عائلة حنيش التعليمية الذكية · الإصدار المطور 2026</span>
+            <AcademicLogo className="w-6 h-6 inline-block" />
+            <span>منصة عائلة حنيش التعليمية الأكاديمية · الإصدار المطور 2026</span>
           </div>
           <p>
             منظومة متكاملة لجميع صفوف التعليم المصري مدعومة بالذكاء الاصطناعي الأكاديمي لحماية تفوق وريادة أبنائنا.

@@ -4,6 +4,7 @@ import {
   ExamResult,
   LessonItem,
   BookletItem,
+  QuizItem,
   HONOR_STUDENTS,
   MINISTRY_LINKS,
   STAGES,
@@ -31,6 +32,18 @@ import {
   Copy,
   Check,
   Link as LinkIcon,
+  Trash2,
+  Edit3,
+  Megaphone,
+  BookOpen,
+  HelpCircle,
+  Users,
+  Search,
+  Filter,
+  Eye,
+  Save,
+  X,
+  AlertTriangle,
 } from 'lucide-react';
 import { StudentProgressChart } from './StudentProgressChart';
 
@@ -40,12 +53,21 @@ interface ParentAdminProps {
   student: StudentProfile;
   examResults: ExamResult[];
   onAddLesson: (lesson: LessonItem) => void;
+  onUpdateLesson?: (lesson: LessonItem) => void;
+  onDeleteLesson?: (lessonId: string) => void;
   onAddBooklet: (booklet: BookletItem) => void;
+  onDeleteBooklet?: (bookletId: string) => void;
   onExportBackup: () => void;
   onImportBackup: (jsonString: string) => void;
   currentUser?: AuthUser | null;
   lessons?: LessonItem[];
   booklets?: BookletItem[];
+  quizzes?: QuizItem[];
+  onAddQuiz?: (quiz: QuizItem) => void;
+  onDeleteQuiz?: (quizId: string) => void;
+  platformAnnouncement?: string;
+  onUpdateAnnouncement?: (text: string) => void;
+  onUpdateStudent?: (student: StudentProfile) => void;
 }
 
 export const ParentAdmin: React.FC<ParentAdminProps> = ({
@@ -54,42 +76,79 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
   student,
   examResults,
   onAddLesson,
+  onUpdateLesson,
+  onDeleteLesson,
   onAddBooklet,
+  onDeleteBooklet,
   onExportBackup,
   onImportBackup,
   currentUser,
   lessons = [],
   booklets = [],
+  quizzes = [],
+  onAddQuiz,
+  onDeleteQuiz,
+  platformAnnouncement = 'مرحباً بكم في منصة عائلة حنيش التعليمية لعام 2026! تم تفعيل السبورة التفاعلية ومستر يونس الذكي.',
+  onUpdateAnnouncement,
+  onUpdateStudent,
 }) => {
   const [activeTab, setActiveTab] = useState<'parent' | 'admin' | 'honor'>(
     currentRole === 'admin' ? 'admin' : 'parent'
+  );
+
+  // Admin CMS Sub-tabs
+  const [adminCmsTab, setAdminCmsTab] = useState<'lessons' | 'quizzes' | 'announcements' | 'students' | 'backup'>(
+    'lessons'
   );
 
   // Printable report month
   const [reportMonth, setReportMonth] = useState('2026-10');
   const [copiedAdminLink, setCopiedAdminLink] = useState(false);
 
-  // Quick Admin Form state
+  // Lessons CMS State
+  const [lessonFilterGrade, setLessonFilterGrade] = useState('all');
+  const [lessonSearchQuery, setLessonSearchQuery] = useState('');
+  const [editingLesson, setEditingLesson] = useState<LessonItem | null>(null);
+
+  // Add Lesson Form state
   const [newLessonTitle, setNewLessonTitle] = useState('');
   const [newLessonSubject, setNewLessonSubject] = useState('اللغة العربية');
   const [newLessonGrade, setNewLessonGrade] = useState('الصف الأول الإعدادي');
   const [newLessonVideo, setNewLessonVideo] = useState('');
+  const [newLessonDuration, setNewLessonDuration] = useState('20 دقيقة');
   const [newLessonDesc, setNewLessonDesc] = useState('');
+
+  // Announcement CMS state
+  const [announcementText, setAnnouncementText] = useState(platformAnnouncement);
+  const [savedAnnouncementToast, setSavedAnnouncementToast] = useState(false);
+
+  // Student XP Edit state
+  const [editingXP, setEditingXP] = useState(student.xpPoints);
+  const [editingStreak, setEditingStreak] = useState(student.streakDays);
+  const [editingStudentName, setEditingStudentName] = useState(student.name);
+
+  // Add Quiz Form state
+  const [newQuizTitle, setNewQuizTitle] = useState('');
+  const [newQuizSubject, setNewQuizSubject] = useState('العلوم');
+  const [newQuizGrade, setNewQuizGrade] = useState('الصف الأول الإعدادي');
+  const [newQuizDuration, setNewQuizDuration] = useState(15);
+  const [newQuizPassing, setNewQuizPassing] = useState(70);
 
   // Calculate student average
   const totalScore = examResults.reduce((acc, r) => acc + (r.score / r.maxScore) * 100, 0);
   const averagePercentage = examResults.length > 0 ? Math.round(totalScore / examResults.length) : 95;
 
   const getLevelInfo = (pct: number) => {
-    if (pct >= 90) return { title: 'ممتاز 🌟', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' };
-    if (pct >= 80) return { title: 'جيد جداً ✨', color: 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300' };
-    if (pct >= 65) return { title: 'جيد 👍', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' };
-    if (pct >= 50) return { title: 'مقبول ⚠️', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' };
-    return { title: 'يحتاج دعم 💡', color: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' };
+    if (pct >= 90) return { title: 'ممتاز', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' };
+    if (pct >= 80) return { title: 'جيد جداً', color: 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300' };
+    if (pct >= 65) return { title: 'جيد', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' };
+    if (pct >= 50) return { title: 'مقبول', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' };
+    return { title: 'يحتاج دعم', color: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' };
   };
 
   const level = getLevelInfo(averagePercentage);
 
+  // Create new lesson
   const handleCreateLesson = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLessonTitle.trim()) return;
@@ -107,7 +166,7 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
       gradeName: newLessonGrade,
       subject: newLessonSubject,
       videoUrl: newLessonVideo.trim() || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      duration: '20 دقيقة',
+      duration: newLessonDuration || '20 دقيقة',
       description: newLessonDesc.trim() || 'درس تعليمي مضاف من لوحة الإدارة.',
       summaryPoints: ['تم رفع وتدقيق هذا الدرس من قبل إدارة المنصة.'],
       views: 1,
@@ -120,6 +179,87 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
     setNewLessonVideo('');
     setNewLessonDesc('');
     alert('تم نشر الدرس بنجاح في قسم المناهج!');
+  };
+
+  // Save edited lesson
+  const handleSaveEditedLesson = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLesson) return;
+    if (onUpdateLesson) {
+      onUpdateLesson(editingLesson);
+      alert('تم تحديث بيانات الدرس بنجاح!');
+    }
+    setEditingLesson(null);
+  };
+
+  // Delete lesson
+  const handleDeleteLessonAction = (lessonId: string, title: string) => {
+    if (window.confirm(`هل أنت متأكد من حذف الدرس: "${title}"؟`)) {
+      if (onDeleteLesson) {
+        onDeleteLesson(lessonId);
+      }
+    }
+  };
+
+  // Save Announcement
+  const handleSaveAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (onUpdateAnnouncement) {
+      onUpdateAnnouncement(announcementText);
+      setSavedAnnouncementToast(true);
+      setTimeout(() => setSavedAnnouncementToast(false), 3000);
+    }
+  };
+
+  // Save student profile edits
+  const handleSaveStudentProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (onUpdateStudent) {
+      onUpdateStudent({
+        ...student,
+        name: editingStudentName.trim() || student.name,
+        xpPoints: Number(editingXP) || 0,
+        streakDays: Number(editingStreak) || 0,
+      });
+      alert('تم تحديث بيانات الطالب ونقاط الخبرة بنجاح!');
+    }
+  };
+
+  // Create new Quiz
+  const handleCreateQuiz = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newQuizTitle.trim()) return;
+
+    const stageId = newQuizGrade.includes('ابتدائي')
+      ? 'primary'
+      : newQuizGrade.includes('إعدادي')
+      ? 'prep'
+      : 'secondary';
+
+    const item: QuizItem = {
+      id: `qz-${Date.now()}`,
+      title: newQuizTitle.trim(),
+      stageId,
+      gradeName: newQuizGrade,
+      subject: newQuizSubject,
+      durationMinutes: Number(newQuizDuration) || 15,
+      passingScore: Number(newQuizPassing) || 70,
+      questions: [
+        {
+          id: `q-1`,
+          question: `سؤال تقييمي أولي حول موضوع: ${newQuizTitle}`,
+          options: ['الإجابة الأولى النموذجية', 'خيار غير صحيح', 'خيار للمقارنة'],
+          correctIndex: 0,
+          explanation: 'توضيح النموذج النموذجي للإجابة الصحيحة.',
+        },
+      ],
+    };
+
+    if (onAddQuiz) {
+      onAddQuiz(item);
+      setNewQuizTitle('');
+      alert('تمت إضافة الاختبار بنجاح في بنك الأسئلة!');
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,26 +278,36 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
     reader.readAsText(file);
   };
 
+  // Filtered lessons for CMS
+  const filteredLessons = lessons.filter((l) => {
+    const matchesGrade = lessonFilterGrade === 'all' || l.gradeName === lessonFilterGrade;
+    const matchesQuery =
+      !lessonSearchQuery.trim() ||
+      l.title.toLowerCase().includes(lessonSearchQuery.toLowerCase()) ||
+      l.subject.toLowerCase().includes(lessonSearchQuery.toLowerCase());
+    return matchesGrade && matchesQuery;
+  });
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8 text-right">
       {/* Top Segmented Selector */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Admin Tab Button (Shown for admins or when switching) */}
+          {/* Admin Tab Button (Shown for admins) */}
           {(currentRole === 'admin' || currentUser?.role === 'admin') && (
             <button
               onClick={() => {
                 setActiveTab('admin');
                 setCurrentRole('admin');
               }}
-              className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'admin'
                   ? 'bg-purple-600 text-white shadow-md'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
               }`}
             >
               <Crown className="w-4 h-4 text-amber-300" />
-              <span>👑 لوحة تحكم مدير المنصة (الأدمن)</span>
+              <span>لوحة تحكم مدير المنصة (الأدمن)</span>
             </button>
           )}
 
@@ -166,7 +316,7 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
               setActiveTab('parent');
               setCurrentRole('parent');
             }}
-            className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'parent'
                 ? 'bg-blue-600 text-white shadow-md'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
@@ -178,229 +328,734 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
 
           <button
             onClick={() => setActiveTab('honor')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'honor'
-                ? 'bg-amber-600 text-white shadow-md'
+                ? 'bg-amber-500 text-white shadow-md'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
             }`}
           >
             <Award className="w-4 h-4" />
-            <span>لوحة الشرف والروابط الرسمية</span>
+            <span>لوحة الشرف والمتفوقين</span>
           </button>
         </div>
 
-        {/* Current Identity Tag */}
-        <div className="text-xs text-slate-500 flex items-center gap-2">
-          <span>الحساب النشط:</span>
-          <span className="font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
-            {currentUser?.name || student.name}
-          </span>
-          <span className="font-bold text-purple-600 dark:text-purple-400">
-            ({currentRole === 'admin' ? '🛡️ مسؤول النظام' : currentRole === 'parent' ? '👨‍👩‍👧 ولي أمر' : '🎓 طالب'})
-          </span>
-        </div>
+        {/* Current Admin Badge */}
+        {currentRole === 'admin' && (
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse"></span>
+            <span className="text-purple-600 dark:text-purple-400 font-bold">
+              {currentUser?.name || 'مدير المنصة'} (صلاحيات كاملة)
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ============================================================== */}
-      {/* 1. ADMIN SUPER PORTAL (THE USER'S DEDICATED ADMIN DASHBOARD)  */}
+      {/* 1. ADMIN CMS CONTROL CENTER                                   */}
       {/* ============================================================== */}
       {activeTab === 'admin' && (
-        <div className="space-y-8 animate-fade-in">
-          {/* Admin Prestige Welcome Banner */}
-          <div className="bg-gradient-to-l from-purple-900 via-indigo-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-              <div className="space-y-2 text-right">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                  <Crown className="w-3.5 h-3.5" />
-                  <span>لوحة الإدارة والتحكم الشاملة (Super Admin)</span>
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-heading font-black text-white">
-                  مرحباً بك يا مدير المنصة: {currentUser?.name || 'كريم محمود حنيش'} 👑
-                </h2>
-                <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
-                  هذه هي واجهتك الخاصة كمسؤول أول للمنصة؛ من هنا يمكنك نشر وتحديث الدروس، متابعة كشوف درجات الطلاب،
-                  إدارة النسخ الاحتياطية، ومراقبة حالة الذكاء الاصطناعي والاستضافة.
-                </p>
+        <div className="space-y-6">
+          {/* Admin Hero Header */}
+          <div className="bg-gradient-to-l from-slate-900 via-purple-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-purple-800/40 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-bold">
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span>مركز إدارة المحتوى الأكاديمي (CMS)</span>
               </div>
+              <h2 className="text-2xl sm:text-3xl font-heading font-black text-white">
+                لوحة تحكم مدير منصة عائلة حنيش التعليمية
+              </h2>
+              <p className="text-slate-300 text-xs max-w-2xl leading-relaxed">
+                تحكم كامل في تعديل وإضافة وحذف الدروس والمناهج، بنك الأسئلة والاختبارات، شريط الإعلانات العامة، وسجل الطلاب.
+              </p>
+            </div>
 
-              {/* Admin Credentials & Secret Link Badge */}
-              <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 text-right space-y-2 min-w-[270px]">
-                <span className="text-[11px] text-amber-300 font-bold block flex items-center gap-1">
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>بيانات اعتماد الأدمن ورابط الدخول:</span>
-                </span>
-                <div className="text-xs font-mono space-y-1">
-                  <p>
-                    <span className="text-slate-300">اليوزر نيم:</span>{' '}
-                    <b className="text-white select-all">admin@hanish.edu.eg</b>
-                  </p>
-                  <p>
-                    <span className="text-slate-300">كلمة المرور:</span>{' '}
-                    <b className="text-amber-300 select-all">Hanish@2026</b>
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    مقبول أيضاً: <span className="text-slate-300 font-mono">Admin#Hanish2026</span>
-                  </p>
-                </div>
-
-                {/* Secret Link Copier */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const secretUrl = `${window.location.origin}${window.location.pathname}?portal=admin`;
-                    navigator.clipboard.writeText(secretUrl);
-                    setCopiedAdminLink(true);
-                    setTimeout(() => setCopiedAdminLink(false), 2500);
-                  }}
-                  className="w-full mt-2 py-1.5 px-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-sans text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow"
-                  title="نسخ الرابط المباشر للوحة الأدمن"
-                >
-                  {copiedAdminLink ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-300" />
-                      <span>تم نسخ رابط الأدمن بنجاح!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>نسخ رابط الأدمن السري (?portal=admin)</span>
-                    </>
-                  )}
-                </button>
-              </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={onExportBackup}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow transition flex items-center gap-2 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>نسخة احتياطية (JSON)</span>
+              </button>
             </div>
           </div>
 
-          {/* KPI Dashboard Metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-right space-y-1">
-              <span className="text-xs text-slate-500 font-bold block">إجمالي الدروس المفعلة</span>
-              <div className="text-3xl font-black text-purple-600 dark:text-purple-400 tabular-nums">
-                {lessons.length || 12}
-              </div>
-              <span className="text-[11px] text-slate-400">فيديو تعليمي تفاعلي</span>
-            </div>
+          {/* CMS Sub-Navigation Tabs */}
+          <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/90 rounded-2xl overflow-x-auto text-xs font-bold">
+            <button
+              onClick={() => setAdminCmsTab('lessons')}
+              className={`px-4 py-2.5 rounded-xl transition flex items-center gap-2 shrink-0 cursor-pointer ${
+                adminCmsTab === 'lessons'
+                  ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>إدارة وتعديل الدروس ({lessons.length})</span>
+            </button>
 
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-right space-y-1">
-              <span className="text-xs text-slate-500 font-bold block">المذكرات والملازم المرفوعة</span>
-              <div className="text-3xl font-black text-blue-600 dark:text-blue-400 tabular-nums">
-                {booklets.length || 8}
-              </div>
-              <span className="text-[11px] text-slate-400">ملفات PDF جاهزة للتحميل</span>
-            </div>
+            <button
+              onClick={() => setAdminCmsTab('quizzes')}
+              className={`px-4 py-2.5 rounded-xl transition flex items-center gap-2 shrink-0 cursor-pointer ${
+                adminCmsTab === 'quizzes'
+                  ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <HelpCircle className="w-4 h-4" />
+              <span>بنك الاختبارات والأسئلة ({quizzes.length})</span>
+            </button>
 
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-right space-y-1">
-              <span className="text-xs text-slate-500 font-bold block">الاختبارات المنجزة</span>
-              <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
-                {examResults.length}
-              </div>
-              <span className="text-[11px] text-slate-400">محاولة تقييم معتمدة</span>
-            </div>
+            <button
+              onClick={() => setAdminCmsTab('announcements')}
+              className={`px-4 py-2.5 rounded-xl transition flex items-center gap-2 shrink-0 cursor-pointer ${
+                adminCmsTab === 'announcements'
+                  ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Megaphone className="w-4 h-4" />
+              <span>شريط التنبيهات والإعلانات</span>
+            </button>
 
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-right space-y-1">
-              <span className="text-xs text-slate-500 font-bold block">متوسط درجات الطلاب</span>
-              <div className="text-3xl font-black text-amber-500 tabular-nums">
-                {averagePercentage}%
-              </div>
-              <span className="text-[11px] text-slate-400">معدل نجاح تراكمي ممتاز</span>
-            </div>
+            <button
+              onClick={() => setAdminCmsTab('students')}
+              className={`px-4 py-2.5 rounded-xl transition flex items-center gap-2 shrink-0 cursor-pointer ${
+                adminCmsTab === 'students'
+                  ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>سجل الطلاب ونقاط الـ XP</span>
+            </button>
+
+            <button
+              onClick={() => setAdminCmsTab('backup')}
+              className={`px-4 py-2.5 rounded-xl transition flex items-center gap-2 shrink-0 cursor-pointer ${
+                adminCmsTab === 'backup'
+                  ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Server className="w-4 h-4" />
+              <span>الاستضافة والنسخ الاحتياطي</span>
+            </button>
           </div>
 
-          {/* Main Admin Actions Grid */}
-          <div className="grid lg:grid-cols-12 gap-6 items-start">
-            {/* 1. Quick Upload Lesson Form */}
-            <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-              <h3 className="font-heading font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
-                <Plus className="w-5 h-5 text-purple-600" />
-                <span>إضافة درس فيديو وشرح جديد للمنصة</span>
-              </h3>
+          {/* SUBTAB 1: LESSONS CMS (Add, Edit, Delete, Filter) */}
+          {adminCmsTab === 'lessons' && (
+            <div className="space-y-6">
+              {/* Add New Lesson Accordion / Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <h3 className="font-heading font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <Plus className="w-5 h-5 text-purple-600" />
+                  <span>إضافة درس فيديو وشرح جديد للمنهج</span>
+                </h3>
 
-              <form onSubmit={handleCreateLesson} className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                    عنوان الدرس:
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newLessonTitle}
-                    onChange={(e) => setNewLessonTitle(e.target.value)}
-                    placeholder="مثال: مراجعة شاملة على الجبر وحل المعادلات"
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
+                <form onSubmit={handleCreateLesson} className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                      الصف الدراسي:
+                      عنوان الدرس:
                     </label>
+                    <input
+                      type="text"
+                      required
+                      value={newLessonTitle}
+                      onChange={(e) => setNewLessonTitle(e.target.value)}
+                      placeholder="مثال: مراجعة شاملة على الجبر وحل المعادلات الكيميائية"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        الصف الدراسي:
+                      </label>
+                      <select
+                        value={newLessonGrade}
+                        onChange={(e) => setNewLessonGrade(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                      >
+                        {STAGES.flatMap((s) => s.years).map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        المادة:
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newLessonSubject}
+                        onChange={(e) => setNewLessonSubject(e.target.value)}
+                        placeholder="مثال: الرياضيات، العلوم، اللغة العربية"
+                        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        المدة الزمنية:
+                      </label>
+                      <input
+                        type="text"
+                        value={newLessonDuration}
+                        onChange={(e) => setNewLessonDuration(e.target.value)}
+                        placeholder="مثال: 25 دقيقة"
+                        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      رابط الفيديو (YouTube / MP4):
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      value={newLessonVideo}
+                      onChange={(e) => setNewLessonVideo(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-left font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      وصف وملخص الدرس:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={newLessonDesc}
+                      onChange={(e) => setNewLessonDesc(e.target.value)}
+                      placeholder="اكتب أهم النقاط والمفاهيم التي يغطيها الشرح..."
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow transition cursor-pointer"
+                  >
+                    + نشر الدرس فورياً للطلاب في المنصة
+                  </button>
+                </form>
+              </div>
+
+              {/* Existing Lessons List & Management Table */}
+              <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div>
+                    <h3 className="font-heading font-extrabold text-base text-slate-900 dark:text-white">
+                      قائمة الدروس المنشورة على المنصة ({filteredLessons.length} درس)
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      يمكنك تعديل أي درس أو حذفه بنقرة واحدة وستنعكس التعديلات فوراً للطلاب.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    {/* Grade Filter */}
                     <select
-                      value={newLessonGrade}
-                      onChange={(e) => setNewLessonGrade(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                      value={lessonFilterGrade}
+                      onChange={(e) => setLessonFilterGrade(e.target.value)}
+                      className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold"
                     >
+                      <option value="all">جميع الصفوف الدراسية</option>
                       {STAGES.flatMap((s) => s.years).map((y) => (
                         <option key={y} value={y}>
                           {y}
                         </option>
                       ))}
                     </select>
-                  </div>
 
+                    {/* Search */}
+                    <div className="relative flex-1 sm:w-48">
+                      <input
+                        type="text"
+                        value={lessonSearchQuery}
+                        onChange={(e) => setLessonSearchQuery(e.target.value)}
+                        placeholder="بحث بالاسم أو المادة..."
+                        className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lessons Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      <tr>
+                        <th className="p-3">عنوان الدرس</th>
+                        <th className="p-3">المادة</th>
+                        <th className="p-3">الصف الدراسي</th>
+                        <th className="p-3">المدة</th>
+                        <th className="p-3">المشاهدات</th>
+                        <th className="p-3 text-center">الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {filteredLessons.map((l) => (
+                        <tr key={l.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                          <td className="p-3 font-bold text-slate-900 dark:text-white">{l.title}</td>
+                          <td className="p-3 text-slate-600 dark:text-slate-300">{l.subject}</td>
+                          <td className="p-3 text-slate-500">{l.gradeName}</td>
+                          <td className="p-3 text-slate-500 font-mono">{l.duration}</td>
+                          <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{l.views}</td>
+                          <td className="p-3">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => setEditingLesson(l)}
+                                className="px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900 font-bold transition flex items-center gap-1 cursor-pointer"
+                                title="تعديل بيانات الدرس"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>تعديل</span>
+                              </button>
+                              <button
+                                onClick={() => handleDeleteLessonAction(l.id, l.title)}
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900 font-bold transition flex items-center gap-1 cursor-pointer"
+                                title="حذف الدرس نهائياً"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>حذف</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Edit Lesson Modal */}
+              {editingLesson && (
+                <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <h4 className="font-heading font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                        <Edit3 className="w-4 h-4 text-purple-600" />
+                        <span>تعديل بيانات الدرس: {editingLesson.title}</span>
+                      </h4>
+                      <button
+                        onClick={() => setEditingLesson(null)}
+                        className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveEditedLesson} className="space-y-3 text-xs">
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          عنوان الدرس:
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={editingLesson.title}
+                          onChange={(e) =>
+                            setEditingLesson({ ...editingLesson, title: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            الصف الدراسي:
+                          </label>
+                          <select
+                            value={editingLesson.gradeName}
+                            onChange={(e) =>
+                              setEditingLesson({ ...editingLesson, gradeName: e.target.value })
+                            }
+                            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                          >
+                            {STAGES.flatMap((s) => s.years).map((y) => (
+                              <option key={y} value={y}>
+                                {y}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            المادة:
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={editingLesson.subject}
+                            onChange={(e) =>
+                              setEditingLesson({ ...editingLesson, subject: e.target.value })
+                            }
+                            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          رابط الفيديو:
+                        </label>
+                        <input
+                          type="url"
+                          required
+                          value={editingLesson.videoUrl}
+                          onChange={(e) =>
+                            setEditingLesson({ ...editingLesson, videoUrl: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-left"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          الوصف:
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={editingLesson.description}
+                          onChange={(e) =>
+                            setEditingLesson({ ...editingLesson, description: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingLesson(null)}
+                          className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold cursor-pointer"
+                        >
+                          إلغاء
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>حفظ التعديلات</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SUBTAB 2: QUIZZES CMS */}
+          {adminCmsTab === 'quizzes' && (
+            <div className="space-y-6">
+              {/* Add New Quiz */}
+              <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <h3 className="font-heading font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <Plus className="w-5 h-5 text-purple-600" />
+                  <span>إضافة اختبار إلكتروني جديد في بنك الأسئلة</span>
+                </h3>
+
+                <form onSubmit={handleCreateQuiz} className="space-y-3 text-xs">
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">المادة:</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      عنوان الاختبار:
+                    </label>
                     <input
                       type="text"
                       required
-                      value={newLessonSubject}
-                      onChange={(e) => setNewLessonSubject(e.target.value)}
-                      placeholder="مثال: الرياضيات أو العلوم"
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                      value={newQuizTitle}
+                      onChange={(e) => setNewQuizTitle(e.target.value)}
+                      placeholder="مثال: اختبار الكيمياء الشامل على الباب الأول"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        الصف الدراسي:
+                      </label>
+                      <select
+                        value={newQuizGrade}
+                        onChange={(e) => setNewQuizGrade(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                      >
+                        {STAGES.flatMap((s) => s.years).map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        المادة:
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newQuizSubject}
+                        onChange={(e) => setNewQuizSubject(e.target.value)}
+                        placeholder="مثال: الفيزياء أو الأحياء"
+                        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        مدة الامتحان (دقيقة):
+                      </label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={120}
+                        value={newQuizDuration}
+                        onChange={(e) => setNewQuizDuration(Number(e.target.value))}
+                        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        نسبة النجاح (%):
+                      </label>
+                      <input
+                        type="number"
+                        min={50}
+                        max={100}
+                        value={newQuizPassing}
+                        onChange={(e) => setNewQuizPassing(Number(e.target.value))}
+                        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs shadow transition cursor-pointer"
+                  >
+                    + نشر الاختبار في قسم المناهج
+                  </button>
+                </form>
+              </div>
+
+              {/* Quizzes List */}
+              <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <h4 className="font-heading font-extrabold text-base text-slate-900 dark:text-white">
+                  الاختبارات الإلكترونية المسجلة ({quizzes.length})
+                </h4>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      <tr>
+                        <th className="p-3">عنوان الاختبار</th>
+                        <th className="p-3">المادة</th>
+                        <th className="p-3">الصف الدراسي</th>
+                        <th className="p-3">المدة</th>
+                        <th className="p-3">درجة النجاح</th>
+                        <th className="p-3 text-center">الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {quizzes.map((q) => (
+                        <tr key={q.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                          <td className="p-3 font-bold text-slate-900 dark:text-white">{q.title}</td>
+                          <td className="p-3 text-slate-600 dark:text-slate-300">{q.subject}</td>
+                          <td className="p-3 text-slate-500">{q.gradeName}</td>
+                          <td className="p-3 text-slate-500 font-mono">{q.durationMinutes} دقيقة</td>
+                          <td className="p-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {q.passingScore}%
+                          </td>
+                          <td className="p-3 text-center">
+                            {onDeleteQuiz && (
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`هل أنت متأكد من حذف هذا الاختبار: "${q.title}"؟`)) {
+                                    onDeleteQuiz(q.id);
+                                  }
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 hover:bg-rose-100 font-bold transition flex items-center gap-1 mx-auto cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>حذف</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SUBTAB 3: ANNOUNCEMENTS CMS */}
+          {adminCmsTab === 'announcements' && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                  <Megaphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-extrabold text-base text-slate-900 dark:text-white">
+                    التحكم في شريط الإعلانات وتنبيهات الطلاب العاجلة
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    النص المكتوب هنا يظهر كشريط إخباري متحرك وتنبيه بارز لجميع الطلاب في الصفحة الرئيسية.
+                  </p>
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs space-y-1">
+                <span className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 block font-mono">
+                  معاينة مباشرة للشريط كما يراه الطلاب:
+                </span>
+                <p className="font-bold">{announcementText || 'لا يوجد إعلان نشط حالياً.'}</p>
+              </div>
+
+              <form onSubmit={handleSaveAnnouncement} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    نص الإعلان أو التنبيه العام:
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={announcementText}
+                    onChange={(e) => setAnnouncementText(e.target.value)}
+                    placeholder="اكتب التنبيه أو موعد الامتحانات أو التهنئة..."
+                    className="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white leading-relaxed"
+                  />
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <span className="text-slate-400 font-bold">إعلانات جاهزة سريعة:</span>
+                  {[
+                    '🔔 تنبيه هام: تم فتح باب التسجيل لمراجعات الفصل الدراسي الأول مع مستر يونس!',
+                    '🌟 مبروك لجميع طلابنا المتفوقين في امتحانات الشهر ونتمنى دوام التميز.',
+                    '⚡ تذكير: غداً موعد تسليم المهام الدراسية وحل تدريبات بنك الأسئلة.',
+                  ].map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setAnnouncementText(preset)}
+                      className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-slate-700 dark:text-slate-300 text-[11px] transition cursor-pointer"
+                    >
+                      نموذج {idx + 1}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  {savedAnnouncementToast && (
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>تم نشر الإعلان فورياً في المنصة!</span>
+                    </span>
+                  )}
+                  <button
+                    type="submit"
+                    className="mr-auto px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>تحديث ونشر الإعلان للطلاب</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* SUBTAB 4: STUDENTS & XP LEDGER */}
+          {adminCmsTab === 'students' && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div>
+                  <h3 className="font-heading font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                    <Users className="w-5 h-5 text-purple-600" />
+                    <span>إدارة بيانات الطلاب ونقاط الـ XP والأوسمة</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    يمكن للمسؤول تعديل نقاط خبرة الطالب، شعلة الالتزام، أو تحديث البيانات الأكاديمية.
+                  </p>
+                </div>
+              </div>
+
+              {/* Student Quick Edit Form */}
+              <form onSubmit={handleSaveStudentProfile} className="space-y-4 max-w-xl">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    اسم الطالب المسجل:
+                  </label>
+                  <input
+                    type="text"
+                    value={editingStudentName}
+                    onChange={(e) => setEditingStudentName(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      نقاط الخبرة (XP):
+                    </label>
+                    <input
+                      type="number"
+                      value={editingXP}
+                      onChange={(e) => setEditingXP(Number(e.target.value))}
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      أيام الالتزام والمذاكرة (Streak):
+                    </label>
+                    <input
+                      type="number"
+                      value={editingStreak}
+                      onChange={(e) => setEditingStreak(Number(e.target.value))}
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                    رابط الفيديو (YouTube / MP4):
-                  </label>
-                  <input
-                    type="url"
-                    required
-                    value={newLessonVideo}
-                    onChange={(e) => setNewLessonVideo(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-left"
-                    dir="ltr"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                    وصف مختصر للدرس:
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={newLessonDesc}
-                    onChange={(e) => setNewLessonDesc(e.target.value)}
-                    placeholder="اكتب أهم المفاهيم التي يغطيها الشرح..."
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
-                  />
-                </div>
-
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow transition cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow transition flex items-center gap-2 cursor-pointer"
                 >
-                  نشر الدرس فورياً للطلاب
+                  <Save className="w-4 h-4" />
+                  <span>تحديث بيانات الطالب</span>
                 </button>
               </form>
             </div>
+          )}
 
-            {/* 2. Backup, Restore & Hosting Controls */}
-            <div className="lg:col-span-5 space-y-4">
-              <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          {/* SUBTAB 5: BACKUP & HOSTING */}
+          {adminCmsTab === 'backup' && (
+            <div className="grid lg:grid-cols-12 gap-6 items-start">
+              <div className="lg:col-span-6 bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
                 <h4 className="font-heading font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
                   <Download className="w-5 h-5 text-emerald-600" />
                   <span>النسخ الاحتياطي واستعادة قاعدة البيانات</span>
@@ -427,90 +1082,27 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
               </div>
 
               {/* Hosting Guide Card */}
-              <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-3xl p-6 border border-indigo-900/60 shadow-sm space-y-3">
+              <div className="lg:col-span-6 bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-3xl p-6 border border-indigo-900/60 shadow-sm space-y-3">
                 <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs">
                   <Cloud className="w-4 h-4 text-cyan-400" />
-                  <span>دليل استضافة ورفع المنصة (Node.js + React):</span>
+                  <span>دليل استضافة ورفع المنصة على موقع مجاني:</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  المنصة مبنية بنظام Full-Stack متكامل يعمل عبر خادم Express و Vite وتستدعي Google Gemini API مباشرة عبر
-                  الخادم الخلفي بحماية كاملة.
+                  المنصة مبنية بنظام Full-Stack متكامل (Express + React + Google Gemini API) ويمكن رفعها مجاناً بسهولة:
                 </p>
-                <div className="space-y-1.5 text-[11px] text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span><b>الخيار الأسهل والأسرع:</b> Render.com أو Railway.app بنقرة واحدة من GitHub.</span>
+                <div className="space-y-2 text-xs text-slate-300">
+                  <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700">
+                    <strong className="text-emerald-400 block mb-1">1. موقع Render.com (مجاني تماماً):</strong>
+                    <span>ارفع الكود على GitHub، ثم ادخل على Render واختر Web Service، وضع أمر البناء <code className="bg-black/40 px-1 py-0.5 rounded font-mono">npm run build</code> وأمر التشغيل <code className="bg-black/40 px-1 py-0.5 rounded font-mono">npm start</code>.</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                    <span><b>الخيار السحابي الأقوى:</b> Google Cloud Run متصل بـ Gemini وسريع جداً.</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-                    <span><b>الخيار الاقتصادي للملايين:</b> VPS (Hostinger أو Hetzner) بـ 4$ شهرياً.</span>
+                  <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700">
+                    <strong className="text-cyan-400 block mb-1">2. موقع Railway.app أو Vercel:</strong>
+                    <span>يدعم الاستضافة الفورية ويوفر شهادة SSL ونطاق مجاني فوري.</span>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* 3. Global Students Examination Ledger */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
-              <div>
-                <h3 className="font-heading font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  <span>سجل درجات الطلاب والاختبارات المنجزة على المنصة</span>
-                </h3>
-                <p className="text-xs text-slate-500">كشف فوري بجميع محاولات الطلاب ودرجاتهم ونسب النجاح المحققة.</p>
-              </div>
-
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
-                إجمالي السجلات: {examResults.length}
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  <tr>
-                    <th className="p-3">المادة</th>
-                    <th className="p-3">عنوان الاختبار</th>
-                    <th className="p-3">الصف الدراسي</th>
-                    <th className="p-3">الدرجة</th>
-                    <th className="p-3">النسبة المئوية</th>
-                    <th className="p-3">التاريخ</th>
-                    <th className="p-3">التقدير</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {examResults.map((r) => {
-                    const pct = Math.round((r.score / r.maxScore) * 100);
-                    const rLevel = getLevelInfo(pct);
-                    return (
-                      <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                        <td className="p-3 font-bold text-slate-900 dark:text-white">{r.subject}</td>
-                        <td className="p-3 text-slate-600 dark:text-slate-300">{r.quizTitle}</td>
-                        <td className="p-3 text-slate-500">{r.gradeName || 'الصف الأول الإعدادي'}</td>
-                        <td className="p-3 font-mono font-bold text-slate-900 dark:text-white tabular-nums">
-                          {r.score} / {r.maxScore}
-                        </td>
-                        <td className="p-3 font-mono font-black text-blue-600 dark:text-blue-400 tabular-nums">
-                          {pct}%
-                        </td>
-                        <td className="p-3 text-slate-500 tabular-nums">{r.date}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${rLevel.color}`}>
-                            {rLevel.title}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -518,7 +1110,7 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
       {/* 2. PARENT PORTAL (FOLLOW UP & PROGRESS)                        */}
       {/* ============================================================== */}
       {activeTab === 'parent' && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6">
           {/* Link Student Code Box */}
           <div className="bg-gradient-to-l from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="space-y-2 text-right">
@@ -540,7 +1132,7 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
                 className="px-5 py-3 rounded-2xl bg-white text-blue-900 font-extrabold text-xs shadow-md hover:bg-slate-100 transition flex items-center gap-2 cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
-                <span>طباعة التقرير الشهري 🖨️</span>
+                <span>طباعة التقرير الشهري</span>
               </button>
             </div>
           </div>
@@ -599,11 +1191,12 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
               <table className="w-full text-right text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                   <tr>
-                    <th className="p-3">المادة الدراسية</th>
+                    <th className="p-3">المادة</th>
                     <th className="p-3">عنوان الاختبار</th>
-                    <th className="p-3">الدرجة المحققة</th>
+                    <th className="p-3">الصف الدراسي</th>
+                    <th className="p-3">الدرجة</th>
                     <th className="p-3">النسبة المئوية</th>
-                    <th className="p-3">تاريخ الاختبار</th>
+                    <th className="p-3">التاريخ</th>
                     <th className="p-3">التقدير</th>
                   </tr>
                 </thead>
@@ -615,6 +1208,7 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
                       <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                         <td className="p-3 font-bold text-slate-900 dark:text-white">{r.subject}</td>
                         <td className="p-3 text-slate-600 dark:text-slate-300">{r.quizTitle}</td>
+                        <td className="p-3 text-slate-500">{r.gradeName || 'الصف الأول الإعدادي'}</td>
                         <td className="p-3 font-mono font-bold text-slate-900 dark:text-white tabular-nums">
                           {r.score} / {r.maxScore}
                         </td>
@@ -633,81 +1227,46 @@ export const ParentAdmin: React.FC<ParentAdminProps> = ({
                 </tbody>
               </table>
             </div>
-
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-400">
-              تقرير إلكتروني رسمي صادر عن منصة عائلة حنيش التعليمية · تم التحقق آلياً
-            </div>
           </div>
         </div>
       )}
 
       {/* ============================================================== */}
-      {/* 3. HONOR ROLL & OFFICIAL LINKS                                 */}
+      {/* 3. HONOR ROLL (لوحة الشرف)                                    */}
       {/* ============================================================== */}
       {activeTab === 'honor' && (
-        <div className="grid lg:grid-cols-12 gap-6 items-start animate-fade-in">
-          {/* Honor Roll */}
-          <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-            <div className="flex items-center justify-between">
-              <h3 className="font-heading font-extrabold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                <Award className="w-5 h-5 text-amber-500" />
-                <span>لوحة الشرف: أوائل عائلة حنيش</span>
-              </h3>
-              <span className="text-xs text-slate-500">تكريم المتفوقين في الاختبارات</span>
-            </div>
-
-            <div className="space-y-3">
-              {HONOR_STUDENTS.map((st, i) => (
-                <div
-                  key={i}
-                  className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl font-bold">{st.badge.split(' ')[0]}</span>
-                    <div>
-                      <span className="font-bold text-sm text-slate-900 dark:text-white block">{st.name}</span>
-                      <span className="text-xs text-slate-500">{st.grade}</span>
-                    </div>
-                  </div>
-
-                  <div className="text-left">
-                    <span className="font-black text-emerald-600 dark:text-emerald-400 text-lg tabular-nums">
-                      {st.average}%
-                    </span>
-                    <span className="text-[10px] text-slate-400 block font-bold">المتوسط التراكمي</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <div className="space-y-6">
+          <div className="text-center max-w-xl mx-auto space-y-2">
+            <span className="text-xs font-bold text-amber-500 uppercase tracking-widest">
+              لوحة الفخر والاعتزاز
+            </span>
+            <h2 className="text-3xl font-heading font-black text-slate-900 dark:text-white">
+              لوحة الشرف لأوائل منصة عائلة حنيش 🏆
+            </h2>
+            <p className="text-xs text-slate-500">
+              تكريم مستمر للطلاب الذين حققوا أعلى نقاط التزام وأعلى الدرجات في الاختبارات الإلكترونية.
+            </p>
           </div>
 
-          {/* Official Ministry Links */}
-          <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <h3 className="font-heading font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
-              <ExternalLink className="w-5 h-5 text-blue-500" />
-              <span>بوابات وزارة التربية والتعليم الرسمية</span>
-            </h3>
-            <p className="text-xs text-slate-500">روابط سريعة ومباشرة للمصادر التعليمية الرسمية في مصر:</p>
-
-            <div className="space-y-2.5">
-              {MINISTRY_LINKS.map((link, i) => (
-                <a
-                  key={i}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200 dark:border-slate-700/60 text-right transition flex items-center justify-between group"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">{link.icon}</span>
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-600">
-                      {link.title}
-                    </span>
-                  </div>
-                  <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-emerald-600" />
-                </a>
-              ))}
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {HONOR_STUDENTS.map((st, idx) => (
+              <div
+                key={idx}
+                className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-center space-y-3 relative overflow-hidden"
+              >
+                <div className="w-16 h-16 rounded-full mx-auto overflow-hidden border-2 border-amber-400 shadow-md bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-heading font-black text-xl">
+                  {st.name.charAt(0)}
+                </div>
+                <div>
+                  <h4 className="font-heading font-extrabold text-sm text-slate-900 dark:text-white">{st.name}</h4>
+                  <span className="text-[11px] text-slate-400 block">{st.grade}</span>
+                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400 block mt-1">{st.badge}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                  معدل التميز: {st.average}%
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

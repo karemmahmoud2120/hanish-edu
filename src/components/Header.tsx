@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { STAGES } from '../data/curriculumData';
 import { AuthUser } from './AuthModal';
+import { AcademicLogo } from './AcademicLogo';
 import {
   Sun,
   Moon,
@@ -22,6 +23,9 @@ import {
   Shield,
   KeyRound,
   Bell,
+  Eye,
+  Globe2,
+  Info,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -33,6 +37,9 @@ interface HeaderProps {
   setCurrentRole: (role: 'student' | 'parent' | 'admin') => void;
   isDark: boolean;
   toggleTheme: () => void;
+  isNightFocus?: boolean;
+  toggleNightFocus?: () => void;
+  onOpenBgSelector?: () => void;
   xpPoints: number;
   currentUser: AuthUser | null;
   onOpenAuth: () => void;
@@ -50,6 +57,9 @@ export const Header: React.FC<HeaderProps> = ({
   setCurrentRole,
   isDark,
   toggleTheme,
+  isNightFocus = false,
+  toggleNightFocus,
+  onOpenBgSelector,
   xpPoints,
   currentUser,
   onOpenAuth,
@@ -100,24 +110,22 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-3 shrink-0 cursor-pointer"
             onClick={() => setCurrentTab('curriculum')}
           >
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white text-2xl shadow-md shadow-emerald-900/20">
-              🐘
-            </div>
+            <AcademicLogo className="w-11 h-11" />
             <div>
               <span className="font-heading font-extrabold text-lg text-slate-900 dark:text-white leading-tight block">
                 منصة عائلة حنيش
               </span>
               <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold block">
-                بوابة التعليم الذكية المتكاملة
+                بوابة التعليم الأكاديمية المتكاملة
               </span>
             </div>
           </div>
 
           {/* Zone 2: Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-300">
+          <nav className="hidden lg:flex items-center gap-1.5 text-sm font-bold text-slate-600 dark:text-slate-300">
             <button
               onClick={() => setCurrentTab('curriculum')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 currentTab === 'curriculum'
                   ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-extrabold'
                   : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -128,53 +136,77 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
+              onClick={() => setCurrentTab('know-your-country')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                currentTab === 'know-your-country'
+                  ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-extrabold'
+                  : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Globe2 className="w-4 h-4 text-amber-600" />
+              <span>اعرف بلدك 🇪🇬</span>
+            </button>
+
+            <button
+              onClick={() => setCurrentTab('about-us')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                currentTab === 'about-us'
+                  ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-extrabold'
+                  : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Info className="w-4 h-4 text-teal-600" />
+              <span>من نحن</span>
+            </button>
+
+            <button
               onClick={() => setCurrentTab('ai-tutor')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 currentTab === 'ai-tutor'
                   ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-extrabold'
                   : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <Sparkles className="w-4 h-4 text-blue-600" />
-              <span>مستر يونس وجيميني</span>
+              <span>مستر يونس</span>
             </button>
 
             <button
               onClick={() => setCurrentTab('image-studio')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 currentTab === 'image-studio'
                   ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-extrabold'
                   : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <Palette className="w-4 h-4 text-purple-600" />
-              <span>استوديو الرسوم التوضيحية</span>
+              <span>الرسوم الذكية</span>
             </button>
 
             <button
               onClick={() => setCurrentTab('brain-hub')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 currentTab === 'brain-hub'
                   ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-extrabold'
                   : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <Gamepad2 className="w-4 h-4 text-amber-600" />
-              <span>ساحة المذاكرة والألعاب</span>
+              <span>المذاكرة والألعاب</span>
             </button>
 
             {/* Show Admin Portal tab ONLY if logged in as Admin */}
             {currentUser?.role === 'admin' && (
               <button
                 onClick={() => setCurrentTab('parent-admin')}
-                className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   currentTab === 'parent-admin'
                     ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-extrabold'
                     : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <Shield className="w-4 h-4 text-purple-600" />
-                <span>👑 لوحة تحكم الأدمن</span>
+                <span>لوحة الأدمن</span>
               </button>
             )}
 
@@ -182,7 +214,7 @@ export const Header: React.FC<HeaderProps> = ({
             {currentUser?.role === 'parent' && (
               <button
                 onClick={() => setCurrentTab('parent-admin')}
-                className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   currentTab === 'parent-admin'
                     ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-extrabold'
                     : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -374,6 +406,35 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
+            {/* Background Theme Selector */}
+            {onOpenBgSelector && (
+              <button
+                onClick={onOpenBgSelector}
+                className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                title="تغيير خلفية ونمط المنصة التعليمية"
+                aria-label="تغيير خلفية المنصة"
+              >
+                <Palette className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              </button>
+            )}
+
+            {/* Night Focus Study Mode Toggle */}
+            <button
+              onClick={toggleNightFocus}
+              className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                isNightFocus
+                  ? 'bg-indigo-950 text-indigo-300 border border-indigo-700/60 shadow-inner'
+                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}
+              title={isNightFocus ? 'إلغاء وضع التركيز الليلي' : 'تفعيل وضع التركيز الليلي لتقليل إجهاد العين أثناء المذاكرة المتأخرة'}
+              aria-label="وضع التركيز الليلي"
+            >
+              <Eye className="w-4 h-4 text-indigo-400" />
+              <span className="hidden xl:inline text-[11px] font-bold">
+                {isNightFocus ? 'تركيز ليلي نشط' : 'وضع التركيز'}
+              </span>
+            </button>
+
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
@@ -387,18 +448,34 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Mobile Subnav Strip */}
-        <div className="lg:hidden flex items-center justify-around gap-1 px-2 py-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 overflow-x-auto text-xs font-bold">
+        <div className="lg:hidden flex items-center justify-around gap-1 px-2 py-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 overflow-x-auto text-xs font-bold custom-scroll">
           <button
             onClick={() => setCurrentTab('curriculum')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
               currentTab === 'curriculum' ? 'bg-emerald-600 text-white' : 'text-slate-600 dark:text-slate-300'
             }`}
           >
             المناهج
           </button>
           <button
+            onClick={() => setCurrentTab('know-your-country')}
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
+              currentTab === 'know-your-country' ? 'bg-amber-600 text-white' : 'text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            اعرف بلدك 🇪🇬
+          </button>
+          <button
+            onClick={() => setCurrentTab('about-us')}
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
+              currentTab === 'about-us' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            من نحن
+          </button>
+          <button
             onClick={() => setCurrentTab('ai-tutor')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
               currentTab === 'ai-tutor' ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-300'
             }`}
           >
@@ -406,7 +483,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
           <button
             onClick={() => setCurrentTab('image-studio')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
               currentTab === 'image-studio' ? 'bg-purple-600 text-white' : 'text-slate-600 dark:text-slate-300'
             }`}
           >
@@ -414,31 +491,31 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
           <button
             onClick={() => setCurrentTab('brain-hub')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
               currentTab === 'brain-hub' ? 'bg-amber-600 text-white' : 'text-slate-600 dark:text-slate-300'
             }`}
           >
-            المذاكرة والألعاب
+            المذاكرة
           </button>
           {currentUser?.role === 'admin' && (
             <button
               onClick={() => setCurrentTab('parent-admin')}
-              className={`px-3 py-1.5 rounded-lg whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
                 currentTab === 'parent-admin' ? 'bg-purple-600 text-white' : 'text-slate-600 dark:text-slate-300'
               }`}
             >
-              👑 لوحة الأدمن
+              👑 الأدمن
             </button>
           )}
 
           {currentUser?.role === 'parent' && (
             <button
               onClick={() => setCurrentTab('parent-admin')}
-              className={`px-3 py-1.5 rounded-lg whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
                 currentTab === 'parent-admin' ? 'bg-indigo-600 text-white' : 'text-slate-600 dark:text-slate-300'
               }`}
             >
-              متابعة ولي الأمر
+              ولي الأمر
             </button>
           )}
         </div>

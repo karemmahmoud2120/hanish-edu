@@ -10,6 +10,11 @@ import { AuthLandingGate } from './components/AuthLandingGate';
 import { AdminPortalGate } from './components/AdminPortalGate';
 import { StudentWelcomeHero } from './components/StudentWelcomeHero';
 import { ToastNotificationCenter } from './components/ToastNotificationCenter';
+import { AcademicLogo } from './components/AcademicLogo';
+import { KnowYourCountry } from './components/KnowYourCountry';
+import { AboutUs } from './components/AboutUs';
+import { BackgroundSelectorModal, BackgroundThemeId } from './components/BackgroundSelectorModal';
+import { Megaphone, AlertCircle, Sparkles } from 'lucide-react';
 import { NotificationItem } from './types/notifications';
 import {
   getStoredNotifications,
@@ -51,6 +56,37 @@ export default function App() {
   }, [isDark]);
 
   const toggleTheme = () => setIsDark((prev) => !prev);
+
+  // Night Focus Study Mode (Auto-detection for 9 PM - 6 AM or persistent preference)
+  const [isNightFocus, setIsNightFocus] = useState<boolean>(() => {
+    const saved = localStorage.getItem('hanish_night_focus');
+    if (saved !== null) return saved === 'true';
+    const hour = new Date().getHours();
+    return hour >= 21 || hour < 6;
+  });
+
+  useEffect(() => {
+    if (isNightFocus) {
+      document.documentElement.classList.add('night-focus');
+      localStorage.setItem('hanish_night_focus', 'true');
+    } else {
+      document.documentElement.classList.remove('night-focus');
+      localStorage.setItem('hanish_night_focus', 'false');
+    }
+  }, [isNightFocus]);
+
+  const toggleNightFocus = () => setIsNightFocus((prev) => !prev);
+
+  // Platform Background Themes (Academic, Arabesque, Blueprint, Campus, Minimal)
+  const [bgTheme, setBgTheme] = useState<BackgroundThemeId>(() => {
+    return (localStorage.getItem('hanish_bg_theme') as BackgroundThemeId) || 'academic';
+  });
+  const [isBgSelectorOpen, setIsBgSelectorOpen] = useState(false);
+
+  const handleSelectBgTheme = (themeId: BackgroundThemeId) => {
+    setBgTheme(themeId);
+    localStorage.setItem('hanish_bg_theme', themeId);
+  };
 
   // Active User / Auth State (Locked by default: user must authenticate)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
@@ -221,7 +257,7 @@ export default function App() {
       setSelectedGrade(user.gradeName);
     }
 
-    if (user.name) {
+    if (user.name && !user.isGuest) {
       setStudent((prev) => ({
         ...prev,
         name: user.name,
@@ -338,12 +374,48 @@ export default function App() {
     setExamResults((prev) => [newRes, ...prev]);
   };
 
+  // Platform Announcement Marquee State
+  const [platformAnnouncement, setPlatformAnnouncement] = useState<string>(() => {
+    return (
+      localStorage.getItem('hanish_announcement') ||
+      '🔔 مرحباً بكم في منصة عائلة حنيش التعليمية لعام 2026! تم تفعيل السبورة التفاعلية الذكية وبنك الأسئلة المطور.'
+    );
+  });
+
+  useEffect(() => {
+    localStorage.setItem('hanish_announcement', platformAnnouncement);
+  }, [platformAnnouncement]);
+
   const handleAddLesson = (lesson: LessonItem) => {
     setLessons((prev) => [lesson, ...prev]);
   };
 
+  const handleUpdateLesson = (updated: LessonItem) => {
+    setLessons((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+  };
+
+  const handleDeleteLesson = (lessonId: string) => {
+    setLessons((prev) => prev.filter((l) => l.id !== lessonId));
+  };
+
   const handleAddBooklet = (booklet: BookletItem) => {
     setBooklets((prev) => [booklet, ...prev]);
+  };
+
+  const handleDeleteBooklet = (bookletId: string) => {
+    setBooklets((prev) => prev.filter((b) => b.id !== bookletId));
+  };
+
+  const handleAddQuiz = (quiz: QuizItem) => {
+    setQuizzes((prev) => [quiz, ...prev]);
+  };
+
+  const handleDeleteQuiz = (quizId: string) => {
+    setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
+  };
+
+  const handleUpdateStudentProfile = (updated: StudentProfile) => {
+    setStudent(updated);
   };
 
   // Full platform backup export & import
@@ -403,12 +475,14 @@ export default function App() {
         isDark={isDark}
         toggleTheme={toggleTheme}
         selectedGrade={selectedGrade}
+        activeBgTheme={bgTheme}
+        onOpenBgSelector={() => setIsBgSelectorOpen(true)}
       />
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
+    <div className={`min-h-screen theme-bg-${bgTheme} text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors`}>
       {/* Top Navbar */}
       <Header
         currentTab={currentTab}
@@ -424,6 +498,9 @@ export default function App() {
         }}
         isDark={isDark}
         toggleTheme={toggleTheme}
+        isNightFocus={isNightFocus}
+        toggleNightFocus={toggleNightFocus}
+        onOpenBgSelector={() => setIsBgSelectorOpen(true)}
         xpPoints={student.xpPoints}
         currentUser={currentUser}
         onOpenAuth={() => setIsAuthModalOpen(true)}
@@ -431,6 +508,51 @@ export default function App() {
         unreadNotificationCount={notifications.filter((n) => !n.read).length}
         onOpenNotifications={() => setIsNotificationDrawerOpen(true)}
       />
+
+      {/* Guest / Demo Preview Mode Notice */}
+      {currentUser?.isGuest && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-xs">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-right">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px]">
+                وضع المعاينة (زائر)
+              </span>
+              <span>
+                أنت تتصفح المنصة كزائر تجريبي. يمكنك تجربة كافة الدروس والسبورة والذكاء الاصطناعي بحرية.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setIsAuthModalOpen(true)}
+                className="px-3 py-1 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black text-xs cursor-pointer transition shadow"
+              >
+                تسجيل حساب دائم لحفظ النقاط
+              </button>
+              <button
+                onClick={handleLogout}
+                className="text-xs text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
+              >
+                خروج
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Announcement Marquee Banner */}
+      {platformAnnouncement && (
+        <div className="bg-gradient-to-r from-purple-900/90 via-indigo-900/90 to-purple-900/90 text-purple-100 border-b border-purple-800/50 py-2 px-4 text-xs font-bold shadow-sm">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 shrink-0 text-amber-300 font-black">
+              <Megaphone className="w-4 h-4" />
+              <span>إعلان الإدارة:</span>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <p className="truncate text-right">{platformAnnouncement}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main View Router */}
       <main className="flex-1 pb-16">
@@ -443,6 +565,21 @@ export default function App() {
               streakDays={student.streakDays}
               onAddXP={handleAddXP}
               onNavigateTab={(tab) => setCurrentTab(tab)}
+            />
+          </div>
+        )}
+
+        {currentTab === 'know-your-country' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+            <KnowYourCountry onAddXP={handleAddXP} />
+          </div>
+        )}
+
+        {currentTab === 'about-us' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+            <AboutUs
+              onNavigateCurriculum={() => setCurrentTab('curriculum')}
+              onNavigateKnowEgypt={() => setCurrentTab('know-your-country')}
             />
           </div>
         )}
@@ -512,12 +649,21 @@ export default function App() {
             student={student}
             examResults={examResults}
             onAddLesson={handleAddLesson}
+            onUpdateLesson={handleUpdateLesson}
+            onDeleteLesson={handleDeleteLesson}
             onAddBooklet={handleAddBooklet}
+            onDeleteBooklet={handleDeleteBooklet}
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
             currentUser={currentUser}
             lessons={lessons}
             booklets={booklets}
+            quizzes={quizzes}
+            onAddQuiz={handleAddQuiz}
+            onDeleteQuiz={handleDeleteQuiz}
+            platformAnnouncement={platformAnnouncement}
+            onUpdateAnnouncement={setPlatformAnnouncement}
+            onUpdateStudent={handleUpdateStudentProfile}
           />
         )}
       </main>
@@ -529,6 +675,14 @@ export default function App() {
         onLoginSuccess={handleLoginSuccess}
         defaultRole={currentRole}
         currentGrade={selectedGrade}
+      />
+
+      {/* Platform Background Themes Selector Modal */}
+      <BackgroundSelectorModal
+        isOpen={isBgSelectorOpen}
+        onClose={() => setIsBgSelectorOpen(false)}
+        activeTheme={bgTheme}
+        onSelectTheme={handleSelectBgTheme}
       />
 
       {/* Toast Notification Center & Drawer */}
@@ -546,8 +700,8 @@ export default function App() {
       <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
         <div className="max-w-7xl mx-auto px-4 space-y-2">
           <div className="flex items-center justify-center gap-2 font-bold text-slate-700 dark:text-slate-300">
-            <span>🐘</span>
-            <span>منصة عائلة حنيش التعليمية الذكية · الإصدار المطور 2026</span>
+            <AcademicLogo className="w-6 h-6 inline-block" />
+            <span>منصة عائلة حنيش التعليمية الأكاديمية · الإصدار المطور 2026</span>
           </div>
           <p className="leading-relaxed">
             منظومة تعليمية متكاملة لجميع صفوف التعليم المصري مدعومة بالذكاء الاصطناعي من Google Gemini.

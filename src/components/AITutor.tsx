@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send, Volume2, VolumeX, RefreshCw, CheckCircle2, XCircle, ArrowLeft, Bot, BookOpen, Calculator, Zap, GraduationCap, Copy, Check } from 'lucide-react';
+import { InteractiveChalkboard } from './InteractiveChalkboard';
 
 interface AITutorProps {
   selectedGrade: string;
@@ -69,17 +70,7 @@ const PERSONAS = [
 export const AITutor: React.FC<AITutorProps> = ({ selectedGrade, onAddXP }) => {
   const [activeMode, setActiveMode] = useState<'chat' | 'blackboard'>('chat');
 
-  // Blackboard Mode State
-  const [boardTopic, setBoardTopic] = useState('');
-  const [isBoardLoading, setIsBoardLoading] = useState(false);
-  const [boardCards, setBoardCards] = useState<LessonCard[]>([]);
-  const [boardSummary, setBoardSummary] = useState('');
-  const [currentCardIdx, setCurrentCardIdx] = useState(0);
-  const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [isAnswerRevealed, setIsAnswerRevealed] = useState(false);
-  const [boardScore, setBoardScore] = useState(0);
-
-  // Audio / Speech State
+  // Active speech and audio state
   const [isTalking, setIsTalking] = useState(false);
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
@@ -190,71 +181,6 @@ export const AITutor: React.FC<AITutorProps> = ({ selectedGrade, onAddXP }) => {
       }
     } finally {
       setIsGeneratingVoice(false);
-    }
-  };
-
-  // Generate blackboard cards
-  const handleGenerateBoard = async (topicToUse?: string) => {
-    const topic = topicToUse || boardTopic.trim();
-    if (!topic) return;
-
-    setIsBoardLoading(true);
-    stopSpeech();
-    try {
-      const res = await fetch('/api/gemini/lesson-cards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic,
-          grade: selectedGrade,
-          subject: 'المنهج الدراسي',
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'تعذر جلب الدرس');
-
-      setBoardCards(data.cards || []);
-      setBoardSummary(data.summary || '');
-      setCurrentCardIdx(0);
-      setSelectedOption(null);
-      setIsAnswerRevealed(false);
-      setBoardScore(0);
-
-      onAddXP(20);
-
-      if (data.cards && data.cards.length > 0) {
-        speakText(`${data.cards[0].title}. ${data.cards[0].text}`);
-      }
-    } catch (err: any) {
-      alert(err.message || 'حدث خطأ في تجهيز السبورة التفاعلية');
-    } finally {
-      setIsBoardLoading(false);
-    }
-  };
-
-  const handleAnswerCard = (optionIdx: number) => {
-    if (isAnswerRevealed) return;
-    setSelectedOption(optionIdx);
-    setIsAnswerRevealed(true);
-
-    const isCorrect = optionIdx === boardCards[currentCardIdx].answer;
-    if (isCorrect) {
-      setBoardScore((prev) => prev + 1);
-      onAddXP(15);
-      speakText('أحسنت يا بطل! إجابة صحيحة وممتازة.');
-    } else {
-      speakText('محاولة جيدة، لكن انتبه للإجابة الصحيحة وتفسيرها.');
-    }
-  };
-
-  const handleNextCard = () => {
-    if (currentCardIdx + 1 < boardCards.length) {
-      const nextIdx = currentCardIdx + 1;
-      setCurrentCardIdx(nextIdx);
-      setSelectedOption(null);
-      setIsAnswerRevealed(false);
-      speakText(`${boardCards[nextIdx].title}. ${boardCards[nextIdx].text}`);
     }
   };
 
@@ -451,183 +377,12 @@ export const AITutor: React.FC<AITutorProps> = ({ selectedGrade, onAddXP }) => {
         </div>
       </div>
 
-      {/* MODE 1: BLACKBOARD MODE */}
+      {/* MODE 1: INTERACTIVE CHALKBOARD & LESSON CARDS */}
       {activeMode === 'blackboard' && (
-        <div className="space-y-6">
-          {/* Input & Quick Presets */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                value={boardTopic}
-                onChange={(e) => setBoardTopic(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleGenerateBoard()}
-                placeholder="اكتب أي درس أو موضوع تريده (مثال: أنواع الخبر في النحو، قوانين نيوتن، تفاعلات الأكسدة)..."
-                className="flex-1 px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
-              />
-              <button
-                onClick={() => handleGenerateBoard()}
-                disabled={isBoardLoading || !boardTopic.trim()}
-                className="px-6 py-3 rounded-2xl bg-gradient-to-l from-emerald-600 to-teal-600 text-white font-extrabold text-sm shadow hover:opacity-95 transition disabled:opacity-50 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-              >
-                {isBoardLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                <span>ابدأ الشرح على السبورة</span>
-              </button>
-            </div>
-
-            {/* Quick Curriculum Chips */}
-            <div className="flex items-center gap-2 flex-wrap text-xs">
-              <span className="text-slate-500 dark:text-slate-400 font-bold">شروحات مقترحة:</span>
-              {['أنواع الخبر في النحو', 'قوانين نيوتن والجاذبية', 'الروابط التساهمية والتهجين', 'التفاعلات الكيميائية ومفهوم الأكسدة'].map((item) => (
-                <button
-                  key={item}
-                  onClick={() => {
-                    setBoardTopic(item);
-                    handleGenerateBoard(item);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition cursor-pointer"
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Interactive Blackboard Canvas */}
-          <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 rounded-3xl p-6 md:p-8 border-4 border-slate-800 text-white shadow-2xl relative min-h-[420px] flex flex-col justify-between overflow-hidden">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 text-xs font-bold text-emerald-400">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>سبورة مستر يونس التفاعلية · {selectedGrade}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => {
-                    if (isTalking) stopSpeech();
-                    setIsAudioEnabled(!isAudioEnabled);
-                  }}
-                  className="flex items-center gap-1 text-slate-400 hover:text-white transition"
-                  title={isAudioEnabled ? 'كتم الصوت التفاعلي' : 'تشغيل الصوت'}
-                >
-                  {isAudioEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
-                  <span>{isAudioEnabled ? 'الصوت مفعّل' : 'صامت'}</span>
-                </button>
-                {boardCards.length > 0 && (
-                  <span className="text-slate-400 tabular-nums">
-                    البطاقة {currentCardIdx + 1} من {boardCards.length} · النقاط: {boardScore}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Content Area */}
-            {isBoardLoading ? (
-              <div className="my-auto py-16 text-center space-y-4">
-                <RefreshCw className="w-10 h-10 text-emerald-400 animate-spin mx-auto" />
-                <h3 className="text-xl font-bold text-white">مستر يونس يكتب ويجهز الشرح على السبورة...</h3>
-                <p className="text-xs text-slate-400">يتم تقسيم الفكرة إلى بطاقات تفاعلية وأسئلة ذكية تناسب صفك الدراسي.</p>
-              </div>
-            ) : boardCards.length === 0 ? (
-              <div className="my-auto py-14 text-center space-y-4 max-w-md mx-auto">
-                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-3xl mx-auto text-emerald-400">
-                  🧑‍🏫
-                </div>
-                <h3 className="text-xl font-bold text-white">السبورة جاهزة للشرح</h3>
-                <p className="text-sm text-slate-300 leading-relaxed">
-                  اكتب موضوع درسك في الأعلى، وسيقوم مستر يونس فوراً بشرح المفاهيم الرئيسية صوتياً وكتابياً مع اختبارات تفاعلية فورية.
-                </p>
-              </div>
-            ) : (
-              <div className="my-6 space-y-6 max-w-3xl mx-auto w-full">
-                {/* Active Card Title & Text */}
-                <div className="space-y-3 bg-slate-900/60 backdrop-blur-md p-6 rounded-2xl border border-slate-700/60 shadow-lg">
-                  <span className="text-xs font-black text-emerald-400 uppercase tracking-widest block">
-                    الفكرة {currentCardIdx + 1}:
-                  </span>
-                  <h3 className="text-2xl font-heading font-extrabold text-white">
-                    {boardCards[currentCardIdx].title}
-                  </h3>
-                  <p className="text-slate-200 text-base leading-relaxed whitespace-pre-line">
-                    {boardCards[currentCardIdx].text}
-                  </p>
-                </div>
-
-                {/* Question & Interactive Options */}
-                <div className="bg-slate-900/90 p-6 rounded-2xl border border-emerald-500/30 space-y-4 shadow-xl">
-                  <div className="flex items-center gap-2 text-amber-300 font-bold text-sm">
-                    <span>❓ سؤال التحقق السريع:</span>
-                    <span className="text-white font-normal">{boardCards[currentCardIdx].question}</span>
-                  </div>
-
-                  <div className="grid gap-2.5">
-                    {boardCards[currentCardIdx].options.map((opt, idx) => {
-                      const isCorrect = idx === boardCards[currentCardIdx].answer;
-                      const isChosen = selectedOption === idx;
-
-                      let btnStyle = 'bg-slate-800/90 border-slate-700 text-slate-200 hover:bg-slate-700 hover:border-slate-600';
-                      if (isAnswerRevealed) {
-                        if (isCorrect) {
-                          btnStyle = 'bg-emerald-950/80 border-emerald-500 text-emerald-200 font-bold';
-                        } else if (isChosen && !isCorrect) {
-                          btnStyle = 'bg-rose-950/80 border-rose-500 text-rose-200';
-                        }
-                      }
-
-                      return (
-                        <button
-                          key={idx}
-                          onClick={() => handleAnswerCard(idx)}
-                          disabled={isAnswerRevealed}
-                          className={`w-full p-3.5 rounded-xl border text-right text-sm transition flex items-center justify-between gap-3 cursor-pointer ${btnStyle}`}
-                        >
-                          <span>{opt}</span>
-                          {isAnswerRevealed && isCorrect && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
-                          {isAnswerRevealed && isChosen && !isCorrect && <XCircle className="w-4 h-4 text-rose-400 shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Feedback Explanation */}
-                  {isAnswerRevealed && (
-                    <div className="pt-3 border-t border-slate-800 space-y-2 text-xs leading-relaxed animate-fade-in">
-                      <p className="text-emerald-300 font-bold">
-                        توضيح المعلم: {boardCards[currentCardIdx].explanation}
-                      </p>
-                      {currentCardIdx + 1 < boardCards.length ? (
-                        <button
-                          onClick={handleNextCard}
-                          className="mt-3 px-6 py-2.5 rounded-xl bg-gradient-to-l from-emerald-600 to-teal-600 text-white font-bold text-xs flex items-center gap-2 hover:opacity-95 transition cursor-pointer"
-                        >
-                          <span>الانتقال للفكرة التالية</span>
-                          <ArrowLeft className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <div className="p-4 rounded-xl bg-emerald-900/30 border border-emerald-500/40 text-emerald-200 font-bold text-sm text-center">
-                          🎉 أحسنت يا بطل! أنهيت شرح درس السبورة بنجاح وحصلت على {boardScore} من {boardCards.length} نقاط.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Bottom Controls */}
-            {boardCards.length > 0 && (
-              <div className="flex items-center justify-between pt-4 border-t border-slate-800 text-xs text-slate-400">
-                <span>{boardSummary || 'استمر في التفاعل لتعزيز استيعابك للمعلومات.'}</span>
-                <button
-                  onClick={() => handleGenerateBoard()}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>توليد كروت جديدة</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <InteractiveChalkboard
+          selectedGrade={selectedGrade}
+          onAddXP={onAddXP}
+        />
       )}
 
       {/* MODE 2: MULTI-TURN GEMINI CHAT */}

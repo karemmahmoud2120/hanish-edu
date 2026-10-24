@@ -8,11 +8,12 @@ export interface AuthUser {
   email: string;
   role: 'student' | 'parent' | 'admin';
   avatar?: string;
-  provider: 'email' | 'google' | 'facebook';
+  provider: 'email' | 'google' | 'facebook' | 'guest';
   gradeName?: string;
   stageId?: 'primary' | 'prep' | 'secondary';
   linkCode?: string;
   createdAt: string;
+  isGuest?: boolean;
 }
 
 interface AuthModalProps {

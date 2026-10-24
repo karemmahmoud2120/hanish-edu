@@ -24,3 +24,129 @@
 .custom-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.6);
 }
+
+/* ----------------------------------------------------
+   Night Focus Study Mode (Deep Midnight Blue Palette)
+   Reduces blue light glare & visual fatigue for late night study sessions
+   ---------------------------------------------------- */
+html.night-focus {
+  color-scheme: dark;
+}
+html.night-focus body {
+  background-color: #070c18 !important;
+  color: #cbd5e1 !important;
+}
+html.night-focus .bg-white {
+  background-color: #0d1527 !important;
+  border-color: #1a2744 !important;
+}
+html.night-focus .bg-slate-50 {
+  background-color: #091020 !important;
+}
+html.night-focus .bg-slate-100 {
+  background-color: #131d35 !important;
+}
+html.night-focus .dark\:bg-slate-900 {
+  background-color: #0d1527 !important;
+}
+html.night-focus .dark\:bg-slate-950 {
+  background-color: #070c18 !important;
+}
+html.night-focus .dark\:bg-slate-800 {
+  background-color: #131d35 !important;
+}
+html.night-focus .border-slate-200,
+html.night-focus .border-slate-700,
+html.night-focus .border-slate-800,
+html.night-focus .dark\:border-slate-800,
+html.night-focus .dark\:border-slate-700 {
+  border-color: #1a2845 !important;
+}
+
+/* ----------------------------------------------------
+   Platform Background Patterns (Customizable Educational Themes)
+   ---------------------------------------------------- */
+.theme-bg-academic {
+  background-color: #f8fafc;
+  background-image: radial-gradient(rgba(100, 116, 139, 0.16) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+html.dark .theme-bg-academic {
+  background-color: #0b1120;
+  background-image: radial-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+html.night-focus .theme-bg-academic {
+  background-color: #070c18 !important;
+  background-image: radial-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px) !important;
+}
+
+.theme-bg-arabesque {
+  background-color: #fbfbfa;
+  background-image: radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.06) 0%, transparent 60%),
+    repeating-linear-gradient(45deg, rgba(16, 185, 129, 0.03) 0, rgba(16, 185, 129, 0.03) 1px, transparent 0, transparent 50%),
+    repeating-linear-gradient(-45deg, rgba(16, 185, 129, 0.03) 0, rgba(16, 185, 129, 0.03) 1px, transparent 0, transparent 50%);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+}
+html.dark .theme-bg-arabesque {
+  background-color: #0a131f;
+  background-image: radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.09) 0%, transparent 60%),
+    repeating-linear-gradient(45deg, rgba(16, 185, 129, 0.04) 0, rgba(16, 185, 129, 0.04) 1px, transparent 0, transparent 50%),
+    repeating-linear-gradient(-45deg, rgba(16, 185, 129, 0.04) 0, rgba(16, 185, 129, 0.04) 1px, transparent 0, transparent 50%);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+}
+html.night-focus .theme-bg-arabesque {
+  background-color: #070c18 !important;
+  background-image: radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.06) 0%, transparent 60%),
+    repeating-linear-gradient(45deg, rgba(56, 189, 248, 0.04) 0, rgba(56, 189, 248, 0.04) 1px, transparent 0, transparent 50%) !important;
+}
+
+.theme-bg-blueprint {
+  background-color: #f1f5f9;
+  background-image: linear-gradient(to right, rgba(148, 163, 184, 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.15) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+html.dark .theme-bg-blueprint {
+  background-color: #090f1d;
+  background-image: linear-gradient(to right, rgba(51, 65, 85, 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(51, 65, 85, 0.4) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+html.night-focus .theme-bg-blueprint {
+  background-color: #070c18 !important;
+  background-image: linear-gradient(to right, rgba(30, 41, 59, 0.7) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(30, 41, 59, 0.7) 1px, transparent 1px) !important;
+}
+
+.theme-bg-campus {
+  background-color: #f8fafc;
+  background-image: radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, rgba(245, 158, 11, 0.05) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+html.dark .theme-bg-campus {
+  background-color: #090e1a;
+  background-image: radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.12) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, rgba(245, 158, 11, 0.06) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+html.night-focus .theme-bg-campus {
+  background-color: #070c18 !important;
+  background-image: radial-gradient(at 50% 0%, rgba(30, 58, 138, 0.25) 0px, transparent 70%) !important;
+  background-attachment: fixed;
+}
+
+.theme-bg-minimal {
+  background-color: #f8fafc;
+}
+html.dark .theme-bg-minimal {
+  background-color: #090e1a;
+}
+html.night-focus .theme-bg-minimal {
+  background-color: #070c18 !important;
+}
+
+

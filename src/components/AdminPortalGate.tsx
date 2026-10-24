@@ -35,7 +35,7 @@ export const AdminPortalGate: React.FC<AdminPortalGateProps> = ({
     }
 
     if (!validPasswords.includes(cleanPass)) {
-      setErrorMsg('كلمة المرور غير صحيحة. كلمة المرور الافتراضية: Hanish@2026');
+      setErrorMsg('كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.');
       return;
     }
 
@@ -105,28 +105,14 @@ export const AdminPortalGate: React.FC<AdminPortalGateProps> = ({
           </div>
         </div>
 
-        {/* Credentials Info Badge */}
-        <div className="p-3.5 rounded-2xl bg-purple-950/60 border border-purple-800/80 space-y-2 text-xs">
-          <div className="flex items-center justify-between text-purple-300 font-bold">
-            <span className="flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-              <span>بيانات اعتماد الأدمن المسجلة:</span>
-            </span>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
-              مفعلة رسمياً
-            </span>
+        {/* Secure Admin Portal Notice */}
+        <div className="p-3.5 rounded-2xl bg-purple-950/40 border border-purple-800/50 flex items-center gap-3 text-xs">
+          <div className="w-8 h-8 rounded-xl bg-purple-900/60 flex items-center justify-center shrink-0 text-purple-300">
+            <Lock className="w-4 h-4" />
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px]">
-            <div className="p-2 rounded-xl bg-slate-950/80 border border-purple-900/60 text-right">
-              <span className="text-[10px] text-slate-400 block font-sans">اليوزر نيم / البريد:</span>
-              <strong className="text-white select-all block truncate">admin@hanish.edu.eg</strong>
-            </div>
-
-            <div className="p-2 rounded-xl bg-slate-950/80 border border-purple-900/60 text-right">
-              <span className="text-[10px] text-slate-400 block font-sans">كلمة المرور:</span>
-              <strong className="text-amber-300 select-all block">Hanish@2026</strong>
-            </div>
+          <div>
+            <span className="font-bold text-white block">منطقة إدارة المنصة المحمية</span>
+            <span className="text-[11px] text-slate-400">يرجى إدخال بيانات اعتماد المسؤول المعتمد للوصول إلى لوحة التحكم.</span>
           </div>
         </div>
 
@@ -151,7 +137,7 @@ export const AdminPortalGate: React.FC<AdminPortalGateProps> = ({
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@hanish.edu.eg"
+                placeholder="اسم المستخدم أو بريد الإدارة"
                 className="w-full pr-10 pl-3 py-3 rounded-xl bg-slate-950/90 border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 text-xs text-white text-left font-mono"
                 dir="ltr"
               />
@@ -169,7 +155,7 @@ export const AdminPortalGate: React.FC<AdminPortalGateProps> = ({
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="أدخل كلمة المرور (Hanish@2026)"
+                placeholder="أدخل كلمة المرور الخاصة بالإدارة"
                 className="w-full pr-10 pl-3 py-3 rounded-xl bg-slate-950/90 border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 text-xs text-white text-left font-mono"
                 dir="ltr"
               />
