@@ -49,7 +49,45 @@ export interface QuizItem {
   durationMinutes: number;
   questions: QuizQuestion[];
   passingScore: number;
+  passingScoreType?: 'percentage' | 'questions';
 }
+
+export const getQuizPassingPercentage = (quiz: QuizItem) =>
+  quiz.passingScoreType === 'percentage'
+    ? quiz.passingScore
+    : Math.round((quiz.passingScore / quiz.questions.length) * 100);
+
+export interface UsefulLink {
+  id: string;
+  title: string;
+  url: string;
+  description: string;
+  category: string;
+}
+
+export const INITIAL_USEFUL_LINKS: UsefulLink[] = [
+  {
+    id: 'link-ministry',
+    title: 'وزارة التربية والتعليم والتعليم الفني',
+    url: 'https://moe.gov.eg/',
+    description: 'الموقع الرسمي للوزارة والأخبار والخدمات التعليمية.',
+    category: 'مصادر رسمية',
+  },
+  {
+    id: 'link-ekb',
+    title: 'بنك المعرفة المصري',
+    url: 'https://www.ekb.eg/',
+    description: 'مصادر معرفة ومراجع تعليمية وبحثية للطلاب والمعلمين.',
+    category: 'مصادر تعليمية',
+  },
+  {
+    id: 'link-study-ekb',
+    title: 'منصة إدارة التعلم ببنك المعرفة',
+    url: 'https://study.ekb.eg/',
+    description: 'بوابة المحتوى التعليمي الرقمية التابعة لبنك المعرفة المصري.',
+    category: 'مصادر تعليمية',
+  },
+];
 
 export interface Flashcard {
   id: string;

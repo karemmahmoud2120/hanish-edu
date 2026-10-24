@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { CurriculumExplorer } from './components/CurriculumExplorer';
 import { AITutor } from './components/AITutor';
@@ -13,7 +13,10 @@ import { ToastNotificationCenter } from './components/ToastNotificationCenter';
 import { AcademicLogo } from './components/AcademicLogo';
 import { KnowYourCountry } from './components/KnowYourCountry';
 import { AboutUs } from './components/AboutUs';
+import { PlatformTour } from './components/PlatformTour';
+import { UsefulLinks } from './components/UsefulLinks';
 import { BackgroundSelectorModal, BackgroundThemeId } from './components/BackgroundSelectorModal';
+import { createPasswordCredential, readRegisteredUsers, saveRegisteredUsers, toSessionUser } from './utils/authStorage';
 import { Megaphone, AlertCircle, Sparkles } from 'lucide-react';
 import { NotificationItem } from './types/notifications';
 import {
@@ -21,11 +24,13 @@ import {
   saveNotifications,
   checkTaskDeadlines,
   checkScheduledStudySessions,
+  clearUserNotificationData,
 } from './utils/notificationService';
 import {
   INITIAL_LESSONS,
   INITIAL_BOOKLETS,
   INITIAL_QUIZZES,
+  INITIAL_USEFUL_LINKS,
   INITIAL_FLASHCARDS,
   INITIAL_TASKS,
   INITIAL_STUDENT,
@@ -33,11 +38,54 @@ import {
   LessonItem,
   BookletItem,
   QuizItem,
+  UsefulLink,
   Flashcard,
   StudyTask,
   ExamResult,
   StudentProfile,
 } from './data/curriculumData';
+
+interface LocalUserData {
+  flashcards: Flashcard[];
+  tasks: StudyTask[];
+  student: StudentProfile;
+  examResults: ExamResult[];
+  selectedGrade: string;
+}
+
+const readLocalUserData = (userId: string): LocalUserData => {
+  const storageKey = `hanish_user_data_${userId}`;
+  const stored = localStorage.getItem(storageKey);
+  if (stored) {
+    try {
+      return JSON.parse(stored) as LocalUserData;
+    } catch (error) {
+      console.error(`تعذر قراءة بيانات المستخدم ${userId}.`, error);
+      throw new Error('بيانات الحساب المحفوظة غير صالحة. يرجى استعادة نسخة احتياطية أو مسح بيانات الحساب.');
+    }
+  }
+
+  const migrationKey = 'hanish_legacy_user_data_migrated';
+  let data: LocalUserData = {
+    flashcards: INITIAL_FLASHCARDS,
+    tasks: INITIAL_TASKS,
+    student: INITIAL_STUDENT,
+    examResults: INITIAL_EXAM_RESULTS,
+    selectedGrade: 'الصف الأول الإعدادي',
+  };
+  if (localStorage.getItem(migrationKey) !== 'true') {
+    data = {
+      flashcards: JSON.parse(localStorage.getItem('hanish_flashcards') || JSON.stringify(INITIAL_FLASHCARDS)) as Flashcard[],
+      tasks: JSON.parse(localStorage.getItem('hanish_tasks') || JSON.stringify(INITIAL_TASKS)) as StudyTask[],
+      student: JSON.parse(localStorage.getItem('hanish_student') || JSON.stringify(INITIAL_STUDENT)) as StudentProfile,
+      examResults: JSON.parse(localStorage.getItem('hanish_results') || JSON.stringify(INITIAL_EXAM_RESULTS)) as ExamResult[],
+      selectedGrade: localStorage.getItem('hanish_grade') || 'الصف الأول الإعدادي',
+    };
+    localStorage.setItem(storageKey, JSON.stringify(data));
+    localStorage.setItem(migrationKey, 'true');
+  }
+  return data;
+};
 
 export default function App() {
   // Theme state
@@ -91,15 +139,61 @@ export default function App() {
   // Active User / Auth State (Locked by default: user must authenticate)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     const saved = localStorage.getItem('hanish_auth_user');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return null;
-      }
+    if (!saved) return null;
+    try {
+      const sessionUser = JSON.parse(saved) as AuthUser;
+      if (sessionUser.isGuest) return null;
+      const registeredUser = readRegisteredUsers().find(
+        (user) => user.id === sessionUser.id &&
+          user.email.toLowerCase() === sessionUser.email.toLowerCase() &&
+          user.role === sessionUser.role
+      );
+      return registeredUser ? toSessionUser({ ...registeredUser, ...sessionUser }) : null;
+    } catch (error) {
+      console.error('تعذر استعادة جلسة المستخدم.', error);
+      return null;
     }
-    return null; // Require login first! Platform services are locked until user signs in.
   });
+
+  const hasValidRegisteredUsersStorage = useRef(true);
+  const [registeredUsers, setRegisteredUsers] = useState<AuthUser[]>(() => {
+    try {
+      return readRegisteredUsers();
+    } catch (error) {
+      hasValidRegisteredUsersStorage.current = false;
+      console.error('تعذر قراءة سجل المستخدمين المحفوظ.', error);
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    if (!hasValidRegisteredUsersStorage.current) return;
+    saveRegisteredUsers(registeredUsers);
+  }, [registeredUsers]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const upgradeLegacyPasswords = async () => {
+      let changed = false;
+      const migratedUsers = await Promise.all(registeredUsers.map(async (user) => {
+        if (!user.password || user.passwordHash) return user;
+        const credential = await createPasswordCredential(user.password);
+        const { password: _legacyPassword, ...userWithoutLegacyPassword } = user;
+        changed = true;
+        return { ...userWithoutLegacyPassword, ...credential };
+      }));
+      if (changed && isMounted) {
+        saveRegisteredUsers(migratedUsers);
+        setRegisteredUsers(migratedUsers);
+      }
+    };
+    upgradeLegacyPasswords().catch((error: unknown) => {
+      console.error('تعذرت ترقية كلمات المرور القديمة إلى التخزين المشتق.', error);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [registeredUsers]);
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
@@ -149,14 +243,16 @@ export default function App() {
   });
 
   // Notification & Toast State
-  const [notifications, setNotifications] = useState<NotificationItem[]>(getStoredNotifications);
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() =>
+    currentUser ? getStoredNotifications(currentUser.id) : []
+  );
   const [activeToast, setActiveToast] = useState<NotificationItem | null>(null);
   const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
   const [initialOpenFocusMode, setInitialOpenFocusMode] = useState(false);
 
   useEffect(() => {
-    saveNotifications(notifications);
-  }, [notifications]);
+    if (currentUser) saveNotifications(currentUser.id, notifications);
+  }, [currentUser, notifications]);
 
   const handleTriggerNotification = (item: NotificationItem) => {
     setNotifications((prev) => {
@@ -175,12 +271,8 @@ export default function App() {
   };
 
   const [selectedGrade, setSelectedGrade] = useState<string>(() => {
-    return currentUser?.gradeName || localStorage.getItem('hanish_grade') || 'الصف الأول الإعدادي';
+    return currentUser ? currentUser.gradeName || readLocalUserData(currentUser.id).selectedGrade : 'الصف الأول الإعدادي';
   });
-
-  useEffect(() => {
-    localStorage.setItem('hanish_grade', selectedGrade);
-  }, [selectedGrade]);
 
   // Educational Data State (Persistent with LocalStorage)
   const [lessons, setLessons] = useState<LessonItem[]>(() => {
@@ -198,24 +290,25 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_QUIZZES;
   });
 
+  const [usefulLinks, setUsefulLinks] = useState(() => {
+    const saved = localStorage.getItem('hanish_useful_links');
+    return saved ? JSON.parse(saved) as typeof INITIAL_USEFUL_LINKS : INITIAL_USEFUL_LINKS;
+  });
+
   const [flashcards, setFlashcards] = useState<Flashcard[]>(() => {
-    const saved = localStorage.getItem('hanish_flashcards');
-    return saved ? JSON.parse(saved) : INITIAL_FLASHCARDS;
+    return currentUser ? readLocalUserData(currentUser.id).flashcards : INITIAL_FLASHCARDS;
   });
 
   const [tasks, setTasks] = useState<StudyTask[]>(() => {
-    const saved = localStorage.getItem('hanish_tasks');
-    return saved ? JSON.parse(saved) : INITIAL_TASKS;
+    return currentUser ? readLocalUserData(currentUser.id).tasks : INITIAL_TASKS;
   });
 
   const [student, setStudent] = useState<StudentProfile>(() => {
-    const saved = localStorage.getItem('hanish_student');
-    return saved ? JSON.parse(saved) : INITIAL_STUDENT;
+    return currentUser ? readLocalUserData(currentUser.id).student : INITIAL_STUDENT;
   });
 
   const [examResults, setExamResults] = useState<ExamResult[]>(() => {
-    const saved = localStorage.getItem('hanish_results');
-    return saved ? JSON.parse(saved) : INITIAL_EXAM_RESULTS;
+    return currentUser ? readLocalUserData(currentUser.id).examResults : INITIAL_EXAM_RESULTS;
   });
 
   // Save changes to localStorage
@@ -232,40 +325,57 @@ export default function App() {
   }, [quizzes]);
 
   useEffect(() => {
-    localStorage.setItem('hanish_flashcards', JSON.stringify(flashcards));
-  }, [flashcards]);
+    localStorage.setItem('hanish_useful_links', JSON.stringify(usefulLinks));
+  }, [usefulLinks]);
 
   useEffect(() => {
-    localStorage.setItem('hanish_tasks', JSON.stringify(tasks));
-  }, [tasks]);
-
-  useEffect(() => {
-    localStorage.setItem('hanish_student', JSON.stringify(student));
-  }, [student]);
-
-  useEffect(() => {
-    localStorage.setItem('hanish_results', JSON.stringify(examResults));
-  }, [examResults]);
+    if (!currentUser || currentUser.isGuest) return;
+    const userData: LocalUserData = { flashcards, tasks, student, examResults, selectedGrade };
+    localStorage.setItem(`hanish_user_data_${currentUser.id}`, JSON.stringify(userData));
+  }, [currentUser, flashcards, tasks, student, examResults, selectedGrade]);
 
   // Handle Auth Login Success
   const handleLoginSuccess = (user: AuthUser) => {
-    setCurrentUser(user);
+    if (user.isGuest) return;
+    const sessionUser = toSessionUser(user);
+    let userData: LocalUserData;
+    try {
+      userData = readLocalUserData(user.id);
+    } catch (error) {
+      console.error('تعذر تحميل بيانات المستخدم.', error);
+      window.alert(error instanceof Error ? error.message : 'تعذر تحميل بيانات الحساب.');
+      return;
+    }
+    setCurrentUser(sessionUser);
+    setNotifications(getStoredNotifications(user.id));
+    setActiveToast(null);
     setCurrentRole(user.role);
-    localStorage.setItem('hanish_auth_user', JSON.stringify(user));
+    localStorage.setItem('hanish_auth_user', JSON.stringify(sessionUser));
+    setRegisteredUsers((previous) => {
+      const existing = previous.find((registered) => registered.id === user.id);
+      const nextUser = { ...existing, ...user };
+      const nextUsers = existing
+        ? previous.map((registered) => registered.id === user.id ? nextUser : registered)
+        : [user, ...previous];
+      saveRegisteredUsers(nextUsers);
+      return nextUsers;
+    });
+
+    setFlashcards(userData.flashcards);
+    setTasks(userData.tasks);
+    setExamResults(userData.examResults);
+    setStudent({
+      ...userData.student,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      linkCode: user.linkCode || userData.student.linkCode,
+      gradeName: user.gradeName || userData.student.gradeName,
+    });
+    setSelectedGrade(user.gradeName || userData.selectedGrade);
 
     if (user.gradeName) {
       setSelectedGrade(user.gradeName);
-    }
-
-    if (user.name && !user.isGuest) {
-      setStudent((prev) => ({
-        ...prev,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        linkCode: user.linkCode || prev.linkCode,
-        gradeName: user.gradeName || prev.gradeName,
-      }));
     }
 
     if (user.role === 'parent') {
@@ -281,6 +391,9 @@ export default function App() {
     setCurrentUser(null);
     localStorage.removeItem('hanish_auth_user');
     setCurrentRole('student');
+    setCurrentTab('curriculum');
+    setNotifications([]);
+    setActiveToast(null);
   };
 
   // Gamification Handlers
@@ -309,8 +422,8 @@ export default function App() {
     if (!currentUser) return;
 
     const runChecks = () => {
-      checkScheduledStudySessions((item) => handleTriggerNotification(item));
-      checkTaskDeadlines(tasks, (item) => handleTriggerNotification(item));
+      checkScheduledStudySessions(currentUser.id, (item) => handleTriggerNotification(item));
+      checkTaskDeadlines(currentUser.id, tasks, (item) => handleTriggerNotification(item));
     };
 
     // Initial check after 2.5 seconds
@@ -414,8 +527,64 @@ export default function App() {
     setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
   };
 
+  const handleAddUsefulLink = (link: UsefulLink) => {
+    setUsefulLinks((previous) => [link, ...previous]);
+  };
+
+  const handleDeleteUsefulLink = (linkId: string) => {
+    setUsefulLinks((previous) => previous.filter((link) => link.id !== linkId));
+  };
+
   const handleUpdateStudentProfile = (updated: StudentProfile) => {
     setStudent(updated);
+  };
+
+  const handleUpdateRegisteredUser = (updated: AuthUser) => {
+    setRegisteredUsers((previous) => {
+      const exists = previous.some((user) => user.id === updated.id);
+      const nextUsers = exists
+        ? previous.map((user) => user.id === updated.id ? updated : user)
+        : [updated, ...previous];
+      saveRegisteredUsers(nextUsers);
+      return nextUsers;
+    });
+    if (currentUser?.id === updated.id) {
+      const sessionUser = toSessionUser(updated);
+      setCurrentUser(sessionUser);
+      setCurrentRole(updated.role);
+      localStorage.setItem('hanish_auth_user', JSON.stringify(sessionUser));
+      setStudent((previous) => ({
+        ...previous,
+        name: updated.name,
+        email: updated.email,
+        role: updated.role,
+        gradeName: updated.gradeName || previous.gradeName,
+      }));
+      if (updated.gradeName) setSelectedGrade(updated.gradeName);
+      if (updated.role !== 'admin') setCurrentTab('curriculum');
+    }
+  };
+
+  const handleDeleteRegisteredUser = (id: string) => {
+    setRegisteredUsers((previous) => {
+      const nextUsers = previous.filter((user) => user.id !== id);
+      saveRegisteredUsers(nextUsers);
+      return nextUsers;
+    });
+    localStorage.removeItem(`hanish_user_data_${id}`);
+    clearUserNotificationData(id);
+    const missionPrefix = `hanish_missions_${id}_`;
+    Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+      .filter((key): key is string => key !== null && key.startsWith(missionPrefix))
+      .forEach((key) => localStorage.removeItem(key));
+    if (currentUser?.id === id) {
+      setCurrentUser(null);
+      setCurrentRole('student');
+      setCurrentTab('curriculum');
+      localStorage.removeItem('hanish_auth_user');
+      setNotifications([]);
+      setActiveToast(null);
+    }
   };
 
   // Full platform backup export & import
@@ -424,6 +593,7 @@ export default function App() {
       lessons,
       booklets,
       quizzes,
+      usefulLinks,
       flashcards,
       tasks,
       student,
@@ -447,6 +617,7 @@ export default function App() {
       if (data.lessons) setLessons(data.lessons);
       if (data.booklets) setBooklets(data.booklets);
       if (data.quizzes) setQuizzes(data.quizzes);
+      if (data.usefulLinks) setUsefulLinks(data.usefulLinks);
       if (data.flashcards) setFlashcards(data.flashcards);
       if (data.tasks) setTasks(data.tasks);
       if (data.student) setStudent(data.student);
@@ -482,7 +653,7 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen theme-bg-${bgTheme} text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors`}>
+    <div className={`platform-shell min-h-screen theme-bg-${bgTheme} text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors`}>
       {/* Top Navbar */}
       <Header
         currentTab={currentTab}
@@ -559,6 +730,8 @@ export default function App() {
         {currentUser && currentRole === 'student' && currentTab === 'curriculum' && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
             <StudentWelcomeHero
+              key={currentUser.id}
+              userId={currentUser.id}
               studentName={currentUser.name || student.name || 'طالب متميز'}
               gradeName={selectedGrade}
               xpPoints={student.xpPoints}
@@ -575,6 +748,8 @@ export default function App() {
           </div>
         )}
 
+        {currentTab === 'useful-links' && <UsefulLinks links={usefulLinks} />}
+
         {currentTab === 'about-us' && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
             <AboutUs
@@ -582,6 +757,10 @@ export default function App() {
               onNavigateKnowEgypt={() => setCurrentTab('know-your-country')}
             />
           </div>
+        )}
+
+        {currentTab === 'platform-tour' && (
+          <PlatformTour onNavigate={setCurrentTab} />
         )}
 
         {currentTab === 'curriculum' && (
@@ -612,6 +791,8 @@ export default function App() {
 
         {currentTab === 'brain-hub' && (
           <BrainHub
+            key={currentUser.id}
+            userId={currentUser.id}
             flashcards={flashcards}
             tasks={tasks}
             onToggleTask={handleToggleTask}
@@ -642,7 +823,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'parent-admin' && (
+        {currentTab === 'parent-admin' && (currentUser?.role === 'admin' || currentUser?.role === 'parent') && (
           <ParentAdmin
             currentRole={currentRole}
             setCurrentRole={setCurrentRole}
@@ -656,11 +837,17 @@ export default function App() {
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
             currentUser={currentUser}
+            registeredUsers={registeredUsers}
+            onUpdateRegisteredUser={handleUpdateRegisteredUser}
+            onDeleteRegisteredUser={handleDeleteRegisteredUser}
             lessons={lessons}
             booklets={booklets}
             quizzes={quizzes}
             onAddQuiz={handleAddQuiz}
             onDeleteQuiz={handleDeleteQuiz}
+            usefulLinks={usefulLinks}
+            onAddUsefulLink={handleAddUsefulLink}
+            onDeleteUsefulLink={handleDeleteUsefulLink}
             platformAnnouncement={platformAnnouncement}
             onUpdateAnnouncement={setPlatformAnnouncement}
             onUpdateStudent={handleUpdateStudentProfile}
@@ -687,6 +874,8 @@ export default function App() {
 
       {/* Toast Notification Center & Drawer */}
       <ToastNotificationCenter
+        key={currentUser.id}
+        userId={currentUser.id}
         notifications={notifications}
         setNotifications={setNotifications}
         activeToast={activeToast}

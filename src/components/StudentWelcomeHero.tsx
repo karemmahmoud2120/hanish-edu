@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 
 interface StudentWelcomeHeroProps {
+  userId: string;
   studentName: string;
   gradeName: string;
   xpPoints: number;
@@ -35,7 +36,41 @@ interface DailyMission {
   icon: 'tutor' | 'curriculum' | 'brain';
 }
 
+const getDailyMissionsStorageKey = (userId: string) =>
+  `hanish_missions_${userId}_${new Date().toISOString().slice(0, 10)}`;
+
+const readDailyMissions = (userId: string): DailyMission[] | null => {
+  const todayKey = getDailyMissionsStorageKey(userId);
+  const saved = localStorage.getItem(todayKey);
+  if (saved) {
+    try {
+      return JSON.parse(saved) as DailyMission[];
+    } catch (error) {
+      console.error('تعذر قراءة مهام اليوم المحفوظة.', error);
+      throw new Error('بيانات مهام اليوم المحفوظة غير صالحة.');
+    }
+  }
+
+  const migrationKey = 'hanish_missions_legacy_migrated';
+  if (localStorage.getItem(migrationKey) !== 'true') {
+    const legacyKey = `hanish_missions_${new Date().toISOString().slice(0, 10)}`;
+    const legacyMissions = localStorage.getItem(legacyKey);
+    if (legacyMissions) localStorage.setItem(todayKey, legacyMissions);
+    localStorage.setItem(migrationKey, 'true');
+    if (legacyMissions) {
+      try {
+        return JSON.parse(legacyMissions) as DailyMission[];
+      } catch (error) {
+        console.error('تعذر ترحيل مهام اليوم القديمة.', error);
+        throw new Error('بيانات مهام اليوم القديمة غير صالحة.');
+      }
+    }
+  }
+  return null;
+};
+
 export const StudentWelcomeHero: React.FC<StudentWelcomeHeroProps> = ({
+  userId,
   studentName,
   gradeName,
   xpPoints,
@@ -73,15 +108,8 @@ export const StudentWelcomeHero: React.FC<StudentWelcomeHeroProps> = ({
 
   // Daily missions with local storage persistence
   const [missions, setMissions] = useState<DailyMission[]>(() => {
-    const todayKey = `hanish_missions_${new Date().toISOString().slice(0, 10)}`;
-    const saved = localStorage.getItem(todayKey);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // fallback
-      }
-    }
+    const saved = readDailyMissions(userId);
+    if (saved) return saved;
     return [
       {
         id: 'mission-1',
@@ -117,7 +145,7 @@ export const StudentWelcomeHero: React.FC<StudentWelcomeHeroProps> = ({
 
   // Save missions to localStorage
   useEffect(() => {
-    const todayKey = `hanish_missions_${new Date().toISOString().slice(0, 10)}`;
+    const todayKey = getDailyMissionsStorageKey(userId);
     localStorage.setItem(todayKey, JSON.stringify(missions));
   }, [missions]);
 
@@ -138,7 +166,7 @@ export const StudentWelcomeHero: React.FC<StudentWelcomeHeroProps> = ({
   const completedCount = missions.filter((m) => m.completed).length;
 
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 text-white p-6 sm:p-8 shadow-xl border border-emerald-900/40 mb-8 transition-all">
+    <div className="student-welcome-hero relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 text-white p-6 sm:p-8 shadow-xl border border-emerald-900/40 mb-8 transition-all">
       {/* Subtle decorative glowing background blur */}
       <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none" />
       <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-teal-500/15 blur-3xl pointer-events-none" />

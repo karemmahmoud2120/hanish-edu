@@ -1,12 +1,22 @@
 import React, { useState } from 'react';
 import { STAGES } from '../data/curriculumData';
 import { X, Check, Lock, Mail, User, Shield, GraduationCap, HeartHandshake, Sparkles, CheckCircle2 } from 'lucide-react';
+import { createPasswordCredential, readRegisteredUsers, saveRegisteredUsers, verifyPassword } from '../utils/authStorage';
+import { authenticateWithSocialProvider } from '../utils/socialAuth';
+import type { AdminPermission } from '../utils/adminPermissions';
 
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
   role: 'student' | 'parent' | 'admin';
+  accountType?: 'admin' | 'supervisor';
+  supervisorTitle?: string;
+  permissions?: AdminPermission[];
+  providerId?: string;
+  password?: string;
+  passwordHash?: string;
+  passwordSalt?: string;
   avatar?: string;
   provider: 'email' | 'google' | 'facebook' | 'guest';
   gradeName?: string;
@@ -31,7 +41,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   defaultRole = 'student',
   currentGrade,
 }) => {
-  const [role, setRole] = useState<'student' | 'parent' | 'admin'>(defaultRole);
+  const [role, setRole] = useState<'student' | 'parent'>('student');
+  React.useEffect(() => {
+    setRole(defaultRole === 'admin' ? 'student' : defaultRole === 'parent' ? 'parent' : 'student');
+  }, [defaultRole]);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   // Form Fields
@@ -43,6 +56,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Loading & Animation states
   const [isSocialLoading, setIsSocialLoading] = useState<'google' | 'facebook' | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -59,54 +73,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     return code;
   };
 
-  // 1. Social Mock Login Handlers (Google / Facebook)
-  const handleSocialLogin = (provider: 'google' | 'facebook') => {
-    setIsSocialLoading(provider);
+  const closeAuthForm = () => {
+    setName('');
+    setEmail('');
+    setPassword('');
+    setParentLinkCode('');
     setErrorMsg(null);
+    onClose();
+  };
 
-    // Simulate realistic OAuth pop-up / handshake delay
-    setTimeout(() => {
-      let userName = '';
-      let userEmail = '';
-      let userAvatar = '';
-
-      if (provider === 'google') {
-        userName = role === 'student' ? 'كريم محمود حنيش' : role === 'parent' ? 'محمود حنيش (ولي أمر)' : 'أ. كمال حنيش (مشرف)';
-        userEmail = role === 'student' ? 'karem.mahmoud.edu@gmail.com' : 'mahmoud.hanish@gmail.com';
-        userAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
-      } else {
-        userName = role === 'student' ? 'أحمد حنيش' : role === 'parent' ? 'ياسر حنيش' : 'م. أحمد المشرف';
-        userEmail = 'ahmed.hanish.edu@facebook.com';
-        userAvatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80';
-      }
-
-      const stageId = selectedGrade.includes('ابتدائي')
-        ? 'primary'
-        : selectedGrade.includes('إعدادي')
-        ? 'prep'
-        : 'secondary';
-
-      const user: AuthUser = {
-        id: `${provider}-${Date.now()}`,
-        name: userName,
-        email: userEmail,
-        role,
-        avatar: userAvatar,
-        provider,
-        gradeName: role === 'student' ? selectedGrade : undefined,
-        stageId: role === 'student' ? stageId : undefined,
-        linkCode: role === 'student' ? generateLinkCode() : parentLinkCode || undefined,
-        createdAt: new Date().toISOString(),
-      };
-
-      setIsSocialLoading(null);
+  const handleSocialLogin = async (provider: 'google' | 'facebook') => {
+    const socialRole: 'student' | 'parent' = role === 'parent' ? 'parent' : 'student';
+    setErrorMsg(null);
+    setIsSocialLoading(provider);
+    try {
+      const user = await authenticateWithSocialProvider(provider, socialRole);
       onLoginSuccess(user);
-      onClose();
-    }, 1100);
+      closeAuthForm();
+    } catch (error) {
+      console.error(`تعذر تسجيل الدخول عبر ${provider}.`, error);
+      setErrorMsg(error instanceof Error ? error.message : 'تعذر تسجيل الدخول عبر هذا المزود.');
+    } finally {
+      setIsSocialLoading(null);
+    }
   };
 
   // 2. Email & Password Submission Handler
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -120,74 +113,123 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    const stageId = selectedGrade.includes('ابتدائي')
-      ? 'primary'
-      : selectedGrade.includes('إعدادي')
-      ? 'prep'
-      : 'secondary';
+    setIsSubmitting(true);
+    let savedUsers: AuthUser[];
+    try {
+      savedUsers = readRegisteredUsers();
+    } catch (error) {
+      console.error('تعذر قراءة سجل الحسابات المحفوظ.', error);
+      setErrorMsg('تعذر قراءة سجل الحسابات. يرجى إعادة تحميل الصفحة.');
+      setIsSubmitting(false);
+      return;
+    }
+    const registeredEmailExists = savedUsers.some((user) => user.email.toLowerCase() === email.trim().toLowerCase());
+    if (authMode === 'register' && registeredEmailExists) {
+      setErrorMsg('هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.');
+      setIsSubmitting(false);
+      return;
+    }
+    const existingUser = savedUsers.find((user) => user.email.toLowerCase() === email.trim().toLowerCase());
+    try {
+      if (authMode === 'login') {
+        if (!existingUser) {
+          setErrorMsg('لا يوجد حساب بهذا البريد الإلكتروني. أنشئ حساباً أولاً.');
+          return;
+        }
+        const verification = await verifyPassword(existingUser, password);
+        if (!verification.valid) {
+          setErrorMsg('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
+          return;
+        }
+        if (verification.upgradedUser) {
+          saveRegisteredUsers(savedUsers.map((user) => user.id === existingUser.id ? verification.upgradedUser! : user));
+        }
+        onLoginSuccess(verification.upgradedUser || existingUser);
+        closeAuthForm();
+        return;
+      }
 
-    const user: AuthUser = {
-      id: `usr-${Date.now()}`,
-      name: name.trim() || email.split('@')[0],
-      email: email.trim(),
-      role,
-      avatar: undefined,
-      provider: 'email',
-      gradeName: role === 'student' ? selectedGrade : undefined,
-      stageId: role === 'student' ? stageId : undefined,
-      linkCode: role === 'student' ? generateLinkCode() : parentLinkCode || undefined,
-      createdAt: new Date().toISOString(),
-    };
+      if (password.length < 8) {
+        setErrorMsg('يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.');
+        return;
+      }
+      const credential = await createPasswordCredential(password);
+      const stageId = selectedGrade.includes('ابتدائي')
+        ? 'primary'
+        : selectedGrade.includes('إعدادي')
+        ? 'prep'
+        : 'secondary';
 
-    onLoginSuccess(user);
-    onClose();
+      const user: AuthUser = {
+        id: `usr-${crypto.randomUUID()}`,
+        name: name.trim() || email.split('@')[0],
+        email: email.trim().toLowerCase(),
+        role,
+        accountType: undefined,
+        avatar: undefined,
+        provider: 'email',
+        ...credential,
+        gradeName: role === 'student' ? selectedGrade : undefined,
+        stageId: role === 'student' ? stageId : undefined,
+        linkCode: role === 'student' ? generateLinkCode() : parentLinkCode || undefined,
+        createdAt: new Date().toISOString(),
+      };
+
+      saveRegisteredUsers([user, ...savedUsers]);
+      onLoginSuccess(user);
+      closeAuthForm();
+    } catch (error) {
+      console.error('تعذر إكمال عملية المصادقة.', error);
+      setErrorMsg(error instanceof Error ? error.message : 'تعذر إكمال عملية المصادقة.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
-      onClick={onClose}
+      className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+      onClick={closeAuthForm}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-5 relative overflow-hidden"
+        className="soft-auth-shell rounded-[28px] max-w-lg w-full p-5 sm:p-7 text-right space-y-5 relative overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-500 via-cyan-500 to-indigo-500" />
+
         <button
-          onClick={onClose}
-          className="absolute top-5 left-5 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center font-bold cursor-pointer transition"
+          onClick={closeAuthForm}
+          className="absolute left-4 top-4 w-9 h-9 rounded-full bg-slate-100/90 dark:bg-slate-800/90 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center font-bold cursor-pointer transition"
         >
           <X className="w-4 h-4" />
         </button>
 
-        {/* Modal Brand Header */}
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white text-2xl shadow-md shrink-0">
+        <div className="flex items-center gap-3 pt-2">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 shadow-lg shadow-emerald-500/20 flex items-center justify-center text-white text-2xl shrink-0">
             🎓
           </div>
           <div>
-            <h3 className="font-heading font-extrabold text-lg text-slate-900 dark:text-white">
+            <h3 className="font-heading font-extrabold text-xl text-slate-900 dark:text-white">
               {authMode === 'login' ? 'تسجيل الدخول للمنصة' : 'إنشاء حساب جديد'}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              اختر دورك وطريقة الدخول للوصول المباشر لصلاحياتك
+              اختر حسابك المناسب وابدأ رحلتك التعليمية في دقائق
             </p>
           </div>
         </div>
 
-        {/* 1. Role Selector Tabs */}
-        <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl text-xs font-bold">
+        <div className="auth-role-pill grid grid-cols-2 gap-2 p-1.5 rounded-2xl text-xs font-bold">
           <button
             type="button"
             onClick={() => setRole('student')}
             className={`py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               role === 'student'
-                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
                 : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <GraduationCap className="w-4 h-4" />
-            <span>طالب (🎒)</span>
+            <span>طالب</span>
           </button>
 
           <button
@@ -195,23 +237,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             onClick={() => setRole('parent')}
             className={`py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               role === 'parent'
-                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20'
                 : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <HeartHandshake className="w-4 h-4" />
-            <span>ولي أمر (👨‍👩‍👧)</span>
+            <span>ولي أمر</span>
           </button>
         </div>
 
-        {/* 2. One-Click Social Auth Simulation */}
         <div className="space-y-2.5 pt-1">
-          {/* Google Sign-In Button */}
           <button
             type="button"
-            disabled={isSocialLoading !== null}
+            disabled={isSocialLoading !== null || isSubmitting}
             onClick={() => handleSocialLogin('google')}
-            className="w-full py-3 px-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50"
+            className="social-button google w-full py-3 px-4 rounded-2xl text-slate-800 dark:text-slate-200 text-xs font-bold shadow-sm flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50"
           >
             {isSocialLoading === 'google' ? (
               <span className="flex items-center gap-2">
@@ -221,34 +261,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             ) : (
               <>
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
-                <span>المتابعة بحساب Google ({role === 'student' ? 'كطالب' : role === 'parent' ? 'كولي أمر' : 'كمشرف'})</span>
+                <span>المتابعة بحساب Google ({role === 'student' ? 'كطالب' : 'كولي أمر'})</span>
               </>
             )}
           </button>
 
-          {/* Facebook Sign-In Button */}
           <button
             type="button"
-            disabled={isSocialLoading !== null}
+            disabled={isSocialLoading !== null || isSubmitting}
             onClick={() => handleSocialLogin('facebook')}
-            className="w-full py-3 px-4 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50"
+            className="social-button facebook w-full py-3 px-4 rounded-2xl text-white text-xs font-bold shadow-sm flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50"
           >
             {isSocialLoading === 'facebook' ? (
               <span className="flex items-center gap-2">
@@ -348,12 +375,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={authMode === 'register' ? 8 : undefined}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="w-full px-3 py-2.5 pl-9 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-left"
                 dir="ltr"
+                autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
               />
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
@@ -399,7 +427,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <button
             type="submit"
-            className="w-full py-3 rounded-2xl bg-gradient-to-l from-emerald-600 to-teal-600 hover:opacity-95 text-white font-extrabold text-xs shadow-md transition cursor-pointer mt-2"
+            disabled={isSubmitting}
+            className="w-full py-3 rounded-2xl bg-gradient-to-l from-emerald-600 to-teal-600 hover:opacity-95 text-white font-extrabold text-xs shadow-md transition cursor-pointer mt-2 disabled:opacity-50"
           >
             {authMode === 'login' ? 'دخول فوري للمنصة' : 'إنشاء وتفعيل الحساب'}
           </button>

@@ -31,6 +31,7 @@ import {
 } from '../utils/notificationService';
 
 interface BrainHubProps {
+  userId: string;
   flashcards: Flashcard[];
   tasks: StudyTask[];
   onToggleTask: (taskId: string) => void;
@@ -49,6 +50,7 @@ interface BrainHubProps {
 }
 
 export const BrainHub: React.FC<BrainHubProps> = ({
+  userId,
   flashcards,
   tasks,
   onToggleTask,
@@ -76,7 +78,7 @@ export const BrainHub: React.FC<BrainHubProps> = ({
   }, [initialOpenFocusMode]);
 
   // Scheduled Study Sessions State
-  const [scheduledSessions, setScheduledSessions] = useState<ScheduledStudySession[]>(getScheduledStudySessions);
+  const [scheduledSessions, setScheduledSessions] = useState<ScheduledStudySession[]>(() => getScheduledStudySessions(userId));
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [sessionSubject, setSessionSubject] = useState('العلوم والمناهج');
   const [sessionMinutesFromNow, setSessionMinutesFromNow] = useState(15);
@@ -85,20 +87,21 @@ export const BrainHub: React.FC<BrainHubProps> = ({
   // Auto-refresh countdown for sessions
   useEffect(() => {
     const interval = setInterval(() => {
-      setScheduledSessions(getScheduledStudySessions());
+      setScheduledSessions(getScheduledStudySessions(userId));
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [userId]);
 
   const handleQuickScheduleSession = (minutesFromNow: number, title?: string, subject?: string) => {
     const targetTime = Date.now() + minutesFromNow * 60 * 1000;
     const sess = addScheduledStudySession(
+      userId,
       title || `جلسة مذاكرة (${minutesFromNow} دقيقة)`,
       targetTime,
       25,
       subject || selectedGrade || 'عامة'
     );
-    setScheduledSessions(getScheduledStudySessions());
+    setScheduledSessions(getScheduledStudySessions(userId));
     if (onTriggerNotification) {
       onTriggerNotification(
         '⏰ تم جدولة جلسة المذاكرة بنجاح!',
@@ -109,8 +112,8 @@ export const BrainHub: React.FC<BrainHubProps> = ({
   };
 
   const handleCancelSession = (id: string) => {
-    removeScheduledStudySession(id);
-    setScheduledSessions(getScheduledStudySessions());
+    removeScheduledStudySession(userId, id);
+    setScheduledSessions(getScheduledStudySessions(userId));
   };
 
   // Flashcards state

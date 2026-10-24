@@ -15,6 +15,7 @@ import {
   Atom,
   HelpCircle,
   Eye,
+  ExternalLink,
 } from 'lucide-react';
 
 interface InteractiveChalkboardProps {
@@ -30,6 +31,11 @@ interface LessonCard {
   options: string[];
   answer: number;
   explanation: string;
+}
+
+interface AnswerSource {
+  title: string;
+  url: string;
 }
 
 const CHALK_COLORS = [
@@ -61,10 +67,12 @@ export const InteractiveChalkboard: React.FC<InteractiveChalkboardProps> = ({
   const [canvasHistory, setCanvasHistory] = useState<ImageData[]>([]);
 
   // Lesson Generation State
-  const [topicInput, setTopicInput] = useState('قوانين نيوتن للحركة والجاذبية');
+  const [topicInput, setTopicInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [cards, setCards] = useState<LessonCard[]>([]);
   const [summary, setSummary] = useState('');
+  const [answerSources, setAnswerSources] = useState<AnswerSource[]>([]);
+  const [answerError, setAnswerError] = useState('');
   const [activeCardIdx, setActiveCardIdx] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [isAnswerRevealed, setIsAnswerRevealed] = useState(false);
@@ -397,6 +405,10 @@ export const InteractiveChalkboard: React.FC<InteractiveChalkboardProps> = ({
     if (!topic) return;
 
     setIsLoading(true);
+    setAnswerError('');
+    setSummary('');
+    setCards([]);
+    setAnswerSources([]);
     stopAudio();
 
     try {
@@ -410,13 +422,21 @@ export const InteractiveChalkboard: React.FC<InteractiveChalkboardProps> = ({
         }),
       });
 
-      const data = await res.json();
-      if (!data || !data.cards || data.cards.length === 0) {
-        throw new Error('تعذر إنشاء بطاقات الشرح');
+      const data = await res.json() as {
+        summary?: string;
+        cards?: LessonCard[];
+        sources?: AnswerSource[];
+        error?: string;
+        grounded?: boolean;
+      };
+      if (!res.ok) throw new Error(data.error || 'تعذر البحث عن إجابة موثوقة.');
+      if (!data.grounded || !data.summary || !Array.isArray(data.cards) || !data.sources?.length) {
+        throw new Error('لم تصل إجابة موثقة بمراجع. حاول صياغة السؤال بشكل أوضح.');
       }
 
       setCards(data.cards);
       setSummary(data.summary || '');
+      setAnswerSources(data.sources);
       setActiveCardIdx(0);
       setSelectedAnswer(null);
       setIsAnswerRevealed(false);
@@ -430,8 +450,9 @@ export const InteractiveChalkboard: React.FC<InteractiveChalkboardProps> = ({
       if (audioEnabled) {
         narrateText(`${data.cards[0].title}. ${data.cards[0].text}`);
       }
-    } catch (err: any) {
-      console.warn('Blackboard load error:', err);
+    } catch (error) {
+      console.error('تعذر الإجابة عن سؤال السبورة من مصادر موثوقة.', error);
+      setAnswerError(error instanceof Error ? error.message : 'حدث خطأ أثناء البحث. حاول مرة أخرى.');
     } finally {
       setIsLoading(false);
     }
@@ -463,11 +484,6 @@ export const InteractiveChalkboard: React.FC<InteractiveChalkboardProps> = ({
     }
   };
 
-  // Initial load
-  useEffect(() => {
-    handleStartLesson();
-  }, []);
-
   return (
     <div className="space-y-6">
       {/* Top Controls & Input Bar */}
@@ -482,7 +498,7 @@ export const InteractiveChalkboard: React.FC<InteractiveChalkboardProps> = ({
                 السبورة التفاعلية الذكية لـ مستر يونس
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                لوح رقمي تفاعلي للشرح والكتابة الحرة مع التوليد الآلي لقواعد المنهج المصري · {selectedGrade}
+                    اكتب سؤالك لتحصل على شرح مستند إلى بحث ومراجع رسمية وتعليمية · {selectedGrade}
               </p>
             </div>
           </div>
@@ -520,7 +536,7 @@ export const InteractiveChalkboard: React.FC<InteractiveChalkboardProps> = ({
             value={topicInput}
             onChange={(e) => setTopicInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleStartLesson()}
-            placeholder="اكتب عنوان أي درس تريده (مثال: قوانين نيوتن، الكيمياء العضوية، النحو والإعراب)..."
+            placeholder="اكتب سؤالك (مثال: كيف تعمل دورة الماء؟ وما مصادر الطاقة المتجددة؟)"
             className="flex-1 px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
           />
           <button
@@ -529,7 +545,7 @@ export const InteractiveChalkboard: React.FC<InteractiveChalkboardProps> = ({
             className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
           >
             {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            <span>اكتب واشرح على السبورة</span>
+            <span>ابحث وأجب من مصادر موثوقة</span>
           </button>
         </div>
 
@@ -550,6 +566,43 @@ export const InteractiveChalkboard: React.FC<InteractiveChalkboardProps> = ({
           ))}
         </div>
       </div>
+
+      {answerError && (
+        <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-right text-sm font-bold leading-7 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+          {answerError}
+        </div>
+      )}
+
+      {summary && (
+        <section className="space-y-4 rounded-3xl border border-emerald-200 bg-white p-5 text-right shadow-sm dark:border-emerald-900/60 dark:bg-slate-900 sm:p-7">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            <h4 className="font-heading text-base font-extrabold text-slate-900 dark:text-white">إجابة مستر يونس الموثقة</h4>
+            <span className="mr-auto rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+              مدعومة ببحث مباشر
+            </span>
+          </div>
+          <p className="whitespace-pre-line text-sm leading-8 text-slate-700 dark:text-slate-200">{summary}</p>
+          <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+            <h5 className="text-xs font-extrabold text-slate-600 dark:text-slate-300">المراجع التي استندت إليها الإجابة:</h5>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {answerSources.map((source) => (
+                <li key={source.url}>
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-teal-800 transition hover:border-teal-400 dark:border-slate-700 dark:bg-slate-800 dark:text-teal-200"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    <span className="line-clamp-2 flex-1">{source.title}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/* Chalkboard Workspace */}
       <div className="relative rounded-3xl overflow-hidden border-8 border-[#3a2e22] dark:border-[#221c15] shadow-2xl bg-[#101d19]">

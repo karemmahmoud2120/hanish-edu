@@ -40,6 +40,8 @@ import {
 import { PLATFORM_IMAGES } from '../assets/images';
 import { AboutUs } from './AboutUs';
 import { KnowYourCountry } from './KnowYourCountry';
+import { createPasswordCredential, readRegisteredUsers, saveRegisteredUsers, verifyPassword } from '../utils/authStorage';
+import { authenticateWithSocialProvider } from '../utils/socialAuth';
 
 interface AuthLandingGateProps {
   onLoginSuccess: (user: AuthUser) => void;
@@ -79,6 +81,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
 
   // Loading & error states
   const [isSocialLoading, setIsSocialLoading] = useState<'google' | 'facebook' | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Generate unique student link code
@@ -91,125 +94,37 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
     return code;
   };
 
-  // 1-Click Fast Admin Login
-  const handleQuickAdminLogin = () => {
-    const adminUser: AuthUser = {
-      id: 'admin-master-01',
-      name: 'كريم محمود حنيش (مدير المنصة)',
-      email: 'admin@hanish.edu.eg',
-      role: 'admin',
-      provider: 'email',
-      createdAt: new Date().toISOString(),
-    };
-    onLoginSuccess(adminUser);
-  };
-
-  // 1-Click Fast Supervisor Login
-  const handleQuickSupervisorLogin = () => {
-    const superUser: AuthUser = {
-      id: 'super-01',
-      name: 'أ. كمال حنيش (المشرف العام)',
-      email: 'supervisor@hanish.edu.eg',
-      role: 'admin',
-      provider: 'email',
-      createdAt: new Date().toISOString(),
-    };
-    onLoginSuccess(superUser);
-  };
-
-  // Guest / Demo Preview Mode (Clear guest session, not treated as a real persistent account)
   const handleQuickStudentLogin = (gradeParam?: string) => {
-    const grade = gradeParam || currentGrade;
-    const guestUser: AuthUser = {
-      id: `guest-${Date.now()}`,
-      name: 'زائر المنصة (معاينة تجريبية)',
-      email: 'guest@hanish.edu.eg',
-      role: 'student',
-      provider: 'guest',
-      gradeName: grade,
-      stageId: grade.includes('ابتدائي')
-        ? 'primary'
-        : grade.includes('إعدادي')
-        ? 'prep'
-        : 'secondary',
-      isGuest: true,
-      createdAt: new Date().toISOString(),
-    };
-    onLoginSuccess(guestUser);
+    if (gradeParam) setCurrentGrade(gradeParam);
+    setAuthMode('register');
+    openAuthWithRole('student');
   };
 
-  // 1-Click Fast Parent Login
   const handleQuickParentLogin = () => {
-    const parentUser: AuthUser = {
-      id: `par-quick-${Date.now()}`,
-      name: 'محمود حنيش (ولي أمر الطالب أحمد)',
-      email: 'parent@hanish.edu.eg',
-      role: 'parent',
-      provider: 'email',
-      linkCode: 'HN7742',
-      createdAt: new Date().toISOString(),
-    };
-    onLoginSuccess(parentUser);
+    setAuthMode('register');
+    openAuthWithRole('parent');
   };
 
-  // Social Mock Login
-  const handleSocialLogin = (provider: 'google' | 'facebook') => {
-    setIsSocialLoading(provider);
+  const handleSocialLogin = async (provider: 'google' | 'facebook') => {
+    if (role !== 'student' && role !== 'parent') {
+      setErrorMsg('تسجيل الدخول الاجتماعي متاح للطلاب وأولياء الأمور فقط.');
+      return;
+    }
     setErrorMsg(null);
-
-    setTimeout(() => {
-      let userName = '';
-      let userEmail = '';
-      let userAvatar = '';
-
-      if (provider === 'google') {
-        userName =
-          role === 'student'
-            ? 'طالب مسجل عبر جوجل'
-            : role === 'parent'
-            ? 'ولي أمر مسجل عبر جوجل'
-            : role === 'supervisor'
-            ? 'مشرف تربوي (جوجل)'
-            : 'مدير المنصة (Google Admin)';
-        userEmail = 'karem.mahmoud2120@gmail.com';
-        userAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
-      } else {
-        userName =
-          role === 'student'
-            ? 'طالب مسجل عبر فيسبوك'
-            : role === 'parent'
-            ? 'ولي أمر مسجل عبر فيسبوك'
-            : 'عضو المنصة (Facebook)';
-        userEmail = 'user.hanish@facebook.com';
-        userAvatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80';
-      }
-
-      const stageId = currentGrade.includes('ابتدائي')
-        ? 'primary'
-        : currentGrade.includes('إعدادي')
-        ? 'prep'
-        : 'secondary';
-
-      const user: AuthUser = {
-        id: `${provider}-${Date.now()}`,
-        name: userName,
-        email: userEmail,
-        role: role === 'supervisor' ? 'admin' : role,
-        avatar: userAvatar,
-        provider,
-        gradeName: role === 'student' ? currentGrade : undefined,
-        stageId: role === 'student' ? stageId : undefined,
-        linkCode: role === 'student' ? generateLinkCode() : parentLinkCode || undefined,
-        createdAt: new Date().toISOString(),
-      };
-
-      setIsSocialLoading(null);
+    setIsSocialLoading(provider);
+    try {
+      const user = await authenticateWithSocialProvider(provider, role);
       onLoginSuccess(user);
-    }, 800);
+    } catch (error) {
+      console.error(`تعذر تسجيل الدخول عبر ${provider}.`, error);
+      setErrorMsg(error instanceof Error ? error.message : 'تعذر تسجيل الدخول عبر هذا المزود.');
+    } finally {
+      setIsSocialLoading(null);
+    }
   };
 
   // Email Submit Handler
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -218,46 +133,75 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
       return;
     }
 
-    const isAdminAccount =
-      email.toLowerCase().includes('admin') ||
-      email.toLowerCase() === 'karem.mahmoud2120@gmail.com' ||
-      role === 'admin';
-
-    if (isAdminAccount && password !== 'Admin#Hanish2026' && password !== 'Hanish@2026') {
-      if (password.length < 4) {
-        setErrorMsg('كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.');
+    setIsSubmitting(true);
+    let savedUsers: AuthUser[];
+    try {
+      savedUsers = readRegisteredUsers();
+    } catch (error) {
+      console.error('تعذر قراءة سجل الحسابات المحفوظ.', error);
+      setErrorMsg('تعذر قراءة سجل الحسابات. يرجى إعادة تحميل الصفحة.');
+      setIsSubmitting(false);
+      return;
+    }
+    const existingUser = savedUsers.find((user) => user.email.toLowerCase() === email.trim().toLowerCase());
+    try {
+      if (authMode === 'login') {
+        if (!existingUser) {
+          setErrorMsg('لا يوجد حساب بهذا البريد الإلكتروني. أنشئ حساباً أولاً.');
+          return;
+        }
+        const verification = await verifyPassword(existingUser, password);
+        if (!verification.valid) {
+          setErrorMsg('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
+          return;
+        }
+        if (verification.upgradedUser) {
+          saveRegisteredUsers(savedUsers.map((user) => user.id === existingUser.id ? verification.upgradedUser! : user));
+        }
+        onLoginSuccess(verification.upgradedUser || existingUser);
         return;
       }
+
+      if (role === 'admin' || role === 'supervisor') {
+        setErrorMsg('إنشاء حسابات الإدارة متاح لمدير المنصة فقط.');
+        return;
+      }
+      if (password.length < 8) {
+        setErrorMsg('يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.');
+        return;
+      }
+      if (existingUser) {
+        setErrorMsg('هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.');
+        return;
+      }
+      const credential = await createPasswordCredential(password);
+      const stageId = currentGrade.includes('ابتدائي')
+        ? 'primary'
+        : currentGrade.includes('إعدادي')
+        ? 'prep'
+        : 'secondary';
+      const assignedRole = role;
+      const user: AuthUser = {
+        id: `usr-${crypto.randomUUID()}`,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        role: assignedRole,
+        accountType: undefined,
+        provider: 'email',
+        ...credential,
+        gradeName: assignedRole === 'student' ? currentGrade : undefined,
+        stageId: assignedRole === 'student' ? stageId : undefined,
+        linkCode: assignedRole === 'student' ? generateLinkCode() : parentLinkCode || undefined,
+        createdAt: new Date().toISOString(),
+      };
+      saveRegisteredUsers([user, ...savedUsers]);
+      onLoginSuccess(user);
+    } catch (error) {
+      console.error('تعذر إكمال عملية المصادقة.', error);
+      setErrorMsg(error instanceof Error ? error.message : 'تعذر إكمال عملية المصادقة.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    const assignedRole: 'student' | 'parent' | 'admin' =
-      role === 'supervisor' || role === 'admin' || isAdminAccount ? 'admin' : role;
-
-    const stageId = currentGrade.includes('ابتدائي')
-      ? 'primary'
-      : currentGrade.includes('إعدادي')
-      ? 'prep'
-      : 'secondary';
-
-    const user: AuthUser = {
-      id: `usr-${Date.now()}`,
-      name:
-        name.trim() ||
-        (assignedRole === 'admin'
-          ? 'مدير المنصة (الأدمن)'
-          : assignedRole === 'parent'
-          ? 'ولي أمر مسجل'
-          : 'طالب مسجل'),
-      email: email.trim(),
-      role: assignedRole,
-      provider: 'email',
-      gradeName: assignedRole === 'student' ? currentGrade : undefined,
-      stageId: assignedRole === 'student' ? stageId : undefined,
-      linkCode: assignedRole === 'student' ? generateLinkCode() : parentLinkCode || undefined,
-      createdAt: new Date().toISOString(),
-    };
-
-    onLoginSuccess(user);
   };
 
   const openAuthWithRole = (targetRole: 'student' | 'parent' | 'admin' | 'supervisor') => {
@@ -292,7 +236,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
           {/* Quick Nav Anchors */}
           <nav className="hidden lg:flex items-center gap-5 text-xs font-extrabold text-slate-600 dark:text-slate-300">
             <button
-              onClick={() => setPreviewSection('know-your-country')}
+              onClick={() => openAuthWithRole('student')}
               className="hover:text-amber-600 dark:hover:text-amber-400 transition flex items-center gap-1.5 cursor-pointer"
             >
               <Globe2 className="w-3.5 h-3.5 text-amber-500" />
@@ -405,14 +349,14 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                 </button>
               </div>
 
-              {/* Quick Demo Instant Trigger */}
+              {/* Registration shortcut */}
               <div className="pt-3 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-bold text-slate-700 dark:text-slate-300">تريد تجربة سريعة وفورية دون ملء بيانات؟</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">ابدأ باستخدام حسابك أو أنشئ حساباً جديداً.</span>
                 <button
                   onClick={() => handleQuickStudentLogin()}
                   className="text-emerald-600 dark:text-emerald-400 font-black hover:underline cursor-pointer flex items-center gap-1"
                 >
-                  <span>⚡ ابدأ كطالب تجريبي الآن</span>
+                  <span>إنشاء حساب طالب</span>
                 </button>
               </div>
             </div>
@@ -601,7 +545,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                 </p>
                 <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button
-                    onClick={() => setPreviewSection('know-your-country')}
+                    onClick={() => openAuthWithRole('student')}
                     className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 transition cursor-pointer"
                   >
                     <Globe2 className="w-4 h-4" />
@@ -718,7 +662,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                     onClick={() => handleQuickStudentLogin('الصف السادس الابتدائي')}
                     className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow transition cursor-pointer"
                   >
-                    دخول تجريبي ابتدائي
+                    إنشاء حساب للمرحلة الابتدائية
                   </button>
                 </div>
               </>
@@ -761,7 +705,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                     onClick={() => handleQuickStudentLogin('الصف الأول الإعدادي')}
                     className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow transition cursor-pointer"
                   >
-                    دخول تجريبي إعدادي
+                    إنشاء حساب للمرحلة الإعدادية
                   </button>
                 </div>
               </>
@@ -804,7 +748,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                     onClick={() => handleQuickStudentLogin('الصف الثالث الثانوي')}
                     className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs shadow transition cursor-pointer"
                   >
-                    دخول تجريبي ثانوي
+                    إنشاء حساب للمرحلة الثانوية
                   </button>
                 </div>
               </>
@@ -978,14 +922,12 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
       {/* UNIFIED AUTH MODAL / PORTAL */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-5 text-right overflow-hidden max-h-[90vh] overflow-y-auto">
-            {/* Top decorative stripe */}
+          <div className="soft-auth-shell relative w-full max-w-lg rounded-[28px] shadow-2xl p-6 sm:p-8 space-y-5 text-right overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-indigo-600" />
 
-            {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 text-emerald-50 flex items-center justify-center font-bold shadow-md shadow-emerald-500/20">
                   🔐
                 </div>
                 <div>
@@ -1006,12 +948,11 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
               </button>
             </div>
 
-            {/* Role Switcher */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">
                 حدد نوع الحساب:
               </label>
-              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+              <div className="auth-role-pill grid grid-cols-2 gap-2 p-1.5 rounded-2xl">
                 <button
                   type="button"
                   onClick={() => {
@@ -1025,7 +966,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                   }`}
                 >
                   <GraduationCap className="w-4 h-4" />
-                  <span>دخول الطلاب (🎒)</span>
+                  <span>دخول الطلاب</span>
                 </button>
 
                 <button
@@ -1041,7 +982,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                   }`}
                 >
                   <HeartHandshake className="w-4 h-4" />
-                  <span>دخول أولياء الأمور (👨‍👩‍👧)</span>
+                  <span>أولياء الأمور</span>
                 </button>
               </div>
             </div>
@@ -1134,13 +1075,20 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                   <input
                     type="password"
                     required
+                    minLength={authMode === 'register' ? 8 : undefined}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     className="w-full pr-10 pl-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-left"
                     dir="ltr"
+                    autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
                   />
                 </div>
+                {authMode === 'register' && (
+                  <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                    تُشتق كلمة المرور قبل حفظها، لكن localStorage محلي ويمكن لمالك الجهاز تعديله؛ لا تستخدم كلمة مرور حساسة.
+                  </p>
+                )}
               </div>
 
               {/* Student Grade in Register Mode */}
@@ -1185,6 +1133,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
 
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className={`w-full py-3 rounded-2xl text-white font-black text-xs shadow transition flex items-center justify-center gap-2 cursor-pointer ${
                   role === 'admin'
                     ? 'bg-purple-600 hover:bg-purple-700'
@@ -1195,34 +1144,34 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                     : 'bg-emerald-600 hover:bg-emerald-700'
                 }`}
               >
-                <span>{authMode === 'login' ? 'دخول المنصة' : 'إنشاء الحساب وبدء التعلم'}</span>
+                <span>{isSubmitting ? 'جارٍ التحقق...' : authMode === 'login' ? 'دخول المنصة' : 'إنشاء الحساب وبدء التعلم'}</span>
                 <ArrowRight className="w-4 h-4 rotate-180" />
               </button>
             </form>
 
-            {/* Quick Demo Options for Student & Parent */}
+            {/* Registration shortcuts */}
             {role === 'student' && (
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span className="text-slate-400">تريد تجربة فورية كطالب؟</span>
+                <span className="text-slate-400">ليس لديك حساب طالب؟</span>
                 <button
                   type="button"
                   onClick={() => handleQuickStudentLogin()}
                   className="text-emerald-600 dark:text-emerald-400 font-black hover:underline cursor-pointer"
                 >
-                  ⚡ دخول تجريبي فوري بنقرة واحدة
+                  إنشاء حساب طالب
                 </button>
               </div>
             )}
 
             {role === 'parent' && (
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span className="text-slate-400">تريد استعراض لوحة ولي الأمر؟</span>
+                <span className="text-slate-400">ليس لديك حساب ولي أمر؟</span>
                 <button
                   type="button"
                   onClick={handleQuickParentLogin}
                   className="text-blue-600 dark:text-blue-400 font-black hover:underline cursor-pointer"
                 >
-                  ⚡ دخول تجريبي كولي أمر بنقرة واحدة
+                  إنشاء حساب ولي أمر
                 </button>
               </div>
             )}
@@ -1243,25 +1192,13 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                   type="button"
                   onClick={() => handleSocialLogin('google')}
                   disabled={isSocialLoading !== null}
-                  className="py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="social-button google py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                   </svg>
                   <span>{isSocialLoading === 'google' ? 'جارٍ الربط...' : 'Google'}</span>
                 </button>
@@ -1270,9 +1207,9 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                   type="button"
                   onClick={() => handleSocialLogin('facebook')}
                   disabled={isSocialLoading !== null}
-                  className="py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="social-button facebook py-2.5 px-3 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
                 >
-                  <svg className="w-4 h-4" fill="#1877F2" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                   </svg>
                   <span>{isSocialLoading === 'facebook' ? 'جارٍ الربط...' : 'Facebook'}</span>
@@ -1307,7 +1244,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
               <div className="flex items-center gap-2">
                 {previewSection === 'about-us' ? (
                   <button
-                    onClick={() => setPreviewSection('know-your-country')}
+                    onClick={() => openAuthWithRole('student')}
                     className="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold text-xs flex items-center gap-1 cursor-pointer border border-amber-500/20"
                   >
                     <Globe2 className="w-3.5 h-3.5 text-amber-600" />
@@ -1343,7 +1280,7 @@ export const AuthLandingGate: React.FC<AuthLandingGateProps> = ({
                     setPreviewSection('none');
                     handleQuickStudentLogin();
                   }}
-                  onNavigateKnowEgypt={() => setPreviewSection('know-your-country')}
+                  onNavigateKnowEgypt={() => openAuthWithRole('student')}
                 />
               )}
             </div>

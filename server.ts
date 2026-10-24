@@ -14,6 +14,211 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '25mb' }));
 
+const decodeXmlText = (value: string) =>
+  value
+    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_match, code: string) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .trim();
+
+const getPublicYouTubeFeed = async (channelId: string) => {
+  const response = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`);
+  if (!response.ok) {
+    console.error('فشل طلب خلاصة قناة YouTube العامة.', response.status);
+    return null;
+  }
+  const xml = await response.text();
+  const videos = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].flatMap(([, entry]) => {
+    const videoId = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/)?.[1];
+    const title = entry.match(/<title>([\s\S]*?)<\/title>/)?.[1];
+    const publishedAt = entry.match(/<published>([^<]+)<\/published>/)?.[1];
+    const description = entry.match(/<media:description>([\s\S]*?)<\/media:description>/)?.[1];
+    const thumbnail = entry.match(/<media:thumbnail[^>]*url="([^"]+)"/)?.[1];
+    if (!videoId || !title) return [];
+    return [{
+      videoId: decodeXmlText(videoId),
+      title: decodeXmlText(title),
+      description: description ? decodeXmlText(description) : '',
+      publishedAt: publishedAt ? decodeXmlText(publishedAt) : '',
+      thumbnail: thumbnail ? decodeXmlText(thumbnail) : `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+    }];
+  });
+  return videos;
+};
+
+app.post('/api/youtube/channel-videos', async (req: Request, res: Response) => {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  const channelId = req.body?.channelId;
+  const pageToken = req.body?.pageToken;
+  const maxResults = Number(req.body?.maxResults ?? 50);
+
+  if (typeof channelId !== 'string' || !/^UC[\w-]{22}$/.test(channelId)) {
+    return res.status(400).json({ error: 'أدخل معرف قناة YouTube صالحًا يبدأ بـ UC.' });
+  }
+  if (pageToken !== undefined && (typeof pageToken !== 'string' || pageToken.length > 2048)) {
+    return res.status(400).json({ error: 'رمز صفحة فيديوهات YouTube غير صالح.' });
+  }
+
+  try {
+    if (!apiKey) {
+      if (pageToken) {
+        return res.status(400).json({ error: 'تم تحميل أحدث فيديوهات القناة فقط. أضف YOUTUBE_API_KEY لتحميل صفحات أقدم.' });
+      }
+      const videos = await getPublicYouTubeFeed(channelId);
+      if (!videos) {
+        return res.status(502).json({ error: 'تعذر قراءة خلاصة القناة العامة. تحقق من معرف القناة وحاول مرة أخرى.' });
+      }
+      return res.json({ videos, nextPageToken: null, source: 'public-feed' });
+    }
+
+    const channelUrl = new URL('https://www.googleapis.com/youtube/v3/channels');
+    channelUrl.searchParams.set('part', 'contentDetails');
+    channelUrl.searchParams.set('id', channelId);
+    channelUrl.searchParams.set('key', apiKey);
+    const channelResponse = await fetch(channelUrl);
+    if (!channelResponse.ok) {
+      console.error('فشل طلب بيانات قناة YouTube.', channelResponse.status);
+      return res.status(502).json({ error: 'تعذر قراءة القناة. تحقق من المعرف ومفتاح YouTube API.' });
+    }
+    const channelData = await channelResponse.json() as {
+      items?: Array<{ contentDetails?: { relatedPlaylists?: { uploads?: string } } }>;
+    };
+    const uploadsPlaylistId = channelData.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+    if (!uploadsPlaylistId) {
+      return res.status(404).json({ error: 'لم يتم العثور على قناة عامة بهذا المعرف أو لا تحتوي على فيديوهات.' });
+    }
+
+    const playlistUrl = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
+    playlistUrl.searchParams.set('part', 'snippet,contentDetails');
+    playlistUrl.searchParams.set('playlistId', uploadsPlaylistId);
+    playlistUrl.searchParams.set('maxResults', String(Number.isInteger(maxResults) ? Math.min(Math.max(maxResults, 1), 50) : 50));
+    playlistUrl.searchParams.set('key', apiKey);
+    if (pageToken) playlistUrl.searchParams.set('pageToken', pageToken);
+
+    const playlistResponse = await fetch(playlistUrl);
+    if (!playlistResponse.ok) {
+      console.error('فشل طلب فيديوهات قناة YouTube.', playlistResponse.status);
+      return res.status(502).json({ error: 'تعذر جلب فيديوهات القناة. تحقق من صلاحية المفتاح وحصة YouTube API.' });
+    }
+    const playlistData = await playlistResponse.json() as {
+      nextPageToken?: string;
+      items?: Array<{
+        snippet?: {
+          title?: string;
+          description?: string;
+          publishedAt?: string;
+          thumbnails?: { medium?: { url?: string }; default?: { url?: string } };
+          resourceId?: { videoId?: string };
+        };
+        contentDetails?: { videoId?: string };
+      }>;
+    };
+    const videos = (playlistData.items || []).flatMap((item) => {
+      const snippet = item.snippet;
+      const videoId = item.contentDetails?.videoId || snippet?.resourceId?.videoId;
+      if (!snippet || !videoId || !snippet.title) return [];
+      return [{
+        videoId,
+        title: snippet.title,
+        description: snippet.description || '',
+        publishedAt: snippet.publishedAt || '',
+        thumbnail: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || '',
+      }];
+    });
+
+    return res.json({ videos, nextPageToken: playlistData.nextPageToken || null, source: 'youtube-api' });
+  } catch (error) {
+    console.error('تعذر الاتصال بخدمة YouTube Data API.', error);
+    return res.status(502).json({ error: 'تعذر الاتصال بخدمة YouTube. حاول مرة أخرى.' });
+  }
+});
+
+app.post('/api/auth/google', async (req: Request, res: Response) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const accessToken = req.body?.accessToken;
+  if (!clientId) return res.status(503).json({ error: 'تسجيل Google غير مُعد على الخادم.' });
+  if (typeof accessToken !== 'string' || accessToken.length < 20) {
+    return res.status(400).json({ error: 'رمز تسجيل Google غير صالح.' });
+  }
+
+  try {
+    const tokenInfoResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
+    if (!tokenInfoResponse.ok) return res.status(401).json({ error: 'انتهت صلاحية جلسة Google أو أن الرمز غير صالح.' });
+    const tokenInfo = await tokenInfoResponse.json() as { issued_to?: string; aud?: string };
+    if ((tokenInfo.issued_to || tokenInfo.aud) !== clientId) {
+      return res.status(401).json({ error: 'رمز Google لم يصدر لتطبيق المنصة.' });
+    }
+
+    const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!profileResponse.ok) return res.status(401).json({ error: 'تعذر التحقق من ملف Google الشخصي.' });
+    const profile = await profileResponse.json() as {
+      sub?: string;
+      name?: string;
+      email?: string;
+      email_verified?: boolean;
+      picture?: string;
+    };
+    if (!profile.sub || !profile.name || !profile.email || profile.email_verified !== true) {
+      return res.status(401).json({ error: 'يجب استخدام حساب Google ببريد إلكتروني موثّق.' });
+    }
+    return res.json({ id: profile.sub, name: profile.name, email: profile.email, avatar: profile.picture });
+  } catch (error) {
+    console.error('تعذر التحقق من تسجيل Google.', error);
+    return res.status(502).json({ error: 'تعذر الاتصال بخدمة التحقق من Google. حاول مرة أخرى.' });
+  }
+});
+
+app.post('/api/auth/facebook', async (req: Request, res: Response) => {
+  const appId = process.env.FACEBOOK_APP_ID;
+  const appSecret = process.env.FACEBOOK_APP_SECRET;
+  const accessToken = req.body?.accessToken;
+  if (!appId || !appSecret) return res.status(503).json({ error: 'تسجيل Facebook غير مُعد على الخادم.' });
+  if (typeof accessToken !== 'string' || accessToken.length < 20) {
+    return res.status(400).json({ error: 'رمز تسجيل Facebook غير صالح.' });
+  }
+
+  try {
+    const appAccessToken = `${appId}|${appSecret}`;
+    const debugUrl = new URL('https://graph.facebook.com/v21.0/debug_token');
+    debugUrl.searchParams.set('input_token', accessToken);
+    debugUrl.searchParams.set('access_token', appAccessToken);
+    const debugResponse = await fetch(debugUrl);
+    if (!debugResponse.ok) return res.status(401).json({ error: 'تعذر التحقق من رمز Facebook.' });
+    const debugResult = await debugResponse.json() as {
+      data?: { app_id?: string; is_valid?: boolean; user_id?: string };
+    };
+    const tokenData = debugResult.data;
+    if (!tokenData?.is_valid || tokenData.app_id !== appId || !tokenData.user_id) {
+      return res.status(401).json({ error: 'رمز Facebook غير صالح لهذا التطبيق.' });
+    }
+
+    const profileUrl = new URL('https://graph.facebook.com/v21.0/me');
+    profileUrl.searchParams.set('fields', 'id,name,email,picture.type(large)');
+    profileUrl.searchParams.set('access_token', accessToken);
+    const profileResponse = await fetch(profileUrl);
+    if (!profileResponse.ok) return res.status(401).json({ error: 'تعذر التحقق من ملف Facebook الشخصي.' });
+    const profile = await profileResponse.json() as {
+      id?: string;
+      name?: string;
+      email?: string;
+      picture?: { data?: { url?: string } };
+    };
+    if (profile.id !== tokenData.user_id || !profile.name || !profile.email) {
+      return res.status(401).json({ error: 'يجب منح إذن البريد الإلكتروني لحساب Facebook.' });
+    }
+    return res.json({ id: profile.id, name: profile.name, email: profile.email, avatar: profile.picture?.data?.url });
+  } catch (error) {
+    console.error('تعذر التحقق من تسجيل Facebook.', error);
+    return res.status(502).json({ error: 'تعذر الاتصال بخدمة التحقق من Facebook. حاول مرة أخرى.' });
+  }
+});
+
 // Shared Gemini client instance
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -286,110 +491,80 @@ Specifications:
   }
 });
 
-// Helper for curated high-quality lesson cards for Egyptian curriculum fallback
-function getCuratedLessonCards(topic: string, subject?: string, grade?: string) {
-  const cleanTopic = topic.trim();
-  return {
-    summary: `شرح تفاعلي مبسط وشامل لدرس "${cleanTopic}" في مادة ${subject || 'المنهج الدراسي'} لطلاب ${grade || 'الشهادات العامة'}.`,
-    cards: [
-      {
-        title: `المفهوم الأساسي: ${cleanTopic}`,
-        text: `يعتبر درس "${cleanTopic}" من الركائز الأساسية في المنهج المصري. الفكرة الجوهرية تدور حول فهم العلاقات والقوانين المنظمة للظاهرة بدلاً من الحفظ المجرد، مع تطبيق المعطيات في نماذج عملية تشبه أسئلة كتاب الوزارة.`,
-        question: `ما هي النقطة المحورية الأهم عند دراسة "${cleanTopic}"؟`,
-        options: [
-          'فهم القوانين والعلاقات الأساسية وتطبيقها عملياً',
-          'حفظ التعريفات فقط دون ربطها بالتطبيقات',
-          'تجاهل الوحدات والأمثلة التوضيحية',
-        ],
-        answer: 0,
-        explanation: 'الفهم التحليلي وربط القوانين بالتطبيقات العملية هو المعيار الأساسي للتميز في الامتحانات الحديثة وفق نظام التقويم المصري.',
-      },
-      {
-        title: 'التحليل الرياضي والعلمي والأمثلة التطبيقية',
-        text: `عند حل أي مسألة أو سؤال في "${cleanTopic}"، نبدأ بتحديد المعطيات والمطلوب بدقة، ثم اختيار القانون أو القاعدة المناسبة، والتعويض خطوة بخطوة للوصول إلى الناتج مع ذكر التمييز أو الوحدة المناسبة.`,
-        question: 'ما هي الخطوة الأولى الصحيحة للتعامل مع مسائل هذا الدرس؟',
-        options: [
-          'تحديد المعطيات والمطلوب وتطبيق القاعدة المناسبة خطوة بخطوة',
-          'التخمين السريع للإجابة دون قراءة المسألة',
-          'استخدام قوانين عشوائية غير مترابطة',
-        ],
-        answer: 0,
-        explanation: 'تحديد المعطيات والمطلوب بدقة يضمن اختيار القانون الرياضي أو العلمي الصحيح وتفادي الأخطاء الشائعة.',
-      },
-      {
-        title: 'خلاصة الأفكار ونصائح الامتحان والتفوق',
-        text: `لضمان الدرجة النهائية في جزئية "${cleanTopic}": راجع الكلمات المفتاحية في رأس السؤال، وركز على الفروق الدقيقة التي يختبرك فيها واضع الامتحان، وتأكد من كتابة خطوات الحل بوضوح.`,
-        question: 'كيف تضمن الحصول على الدرجة النهائية في هذا الموضوع؟',
-        options: [
-          'مراجعة الكلمات المفتاحية وكتابة خطوات الإجابة النموذجية كاملة',
-          'كتابة الناتج النهائي فقط دون توضيح الخطوات',
-          'عدم مراجعة الإجابة قبل تسليم ورقة الامتحان',
-        ],
-        answer: 0,
-        explanation: 'المصحح يبحث عن خطوات الحل المنطقية والكلمات المفتاحية التي تبرهن على الاستيعاب العميق للموضوع.',
-      },
-    ],
-  };
-}
-
 // 3. Mr. Younis Interactive Blackboard & Concept Cards Generator
 app.post('/api/gemini/lesson-cards', async (req: Request, res: Response) => {
   const { subject = 'المنهج الدراسي', topic = '', grade = 'مرحلة عامة' } = req.body;
-  
-  if (!topic || !topic.trim()) {
+
+  if (typeof topic !== 'string' || !topic.trim()) {
     return res.status(400).json({ error: 'Topic is required.' });
   }
-
-  const promptText = `أنت 'مستر يونس' معلم مصري خبير ومحبوب للطلاب.
-قم بإعداد درس تفاعلي منظم على السبورة على هيئة 3 كروت شرح متدرجة ومترابطة للموضوع التالي: "${topic}".
-المادة: ${subject}
-الصف الدراسي: ${grade}
-
-يجب أن تكون الاستجابة بصيغة JSON حصراً مطابقة تماماً للمخطط التالي:
-{
-  "summary": "مقدمة مشجعة في سطرين عن أهمية الدرس",
-  "cards": [
-    {
-      "title": "عنوان الفكرة الأولى",
-      "text": "شرح الفكرة بأسلوب واضح وسلس مع أمثلة واقعية تناسب الطالب المصري",
-      "question": "سؤال اختيار من متعدد مباشر لقياس الفهم",
-      "options": ["الخيار الأول", "الخيار الثاني", "الخيار الثالث"],
-      "answer": 0,
-      "explanation": "توضيح سبب صحة هذا الخيار بأسلوب مشجع"
-    }
-  ]
-}
-ملاحظة: "answer" هو فهرس (index من 0 إلى 2) للإجابة الصحيحة.`;
+  if (topic.length > 500) {
+    return res.status(400).json({ error: 'السؤال طويل جدًا. اختصره إلى 500 حرف أو أقل.' });
+  }
 
   try {
     const ai = getGeminiClient();
-    let rawText = '';
+    const promptText = `أنت "مستر يونس"، معلم مصري يجيب الطالب بلغة عربية سهلة ودقيقة.
+أجب عن سؤال الطالب اعتمادًا على بحث Google الحالي ومصادر رسمية أو تعليمية موثوقة فقط، مثل مواقع الوزارات والجامعات والهيئات العلمية والمنظمات الدولية. لا تستخدم المدونات أو المنتديات أو منشورات التواصل الاجتماعي. لا تخترع حقائق أو مراجع، وإذا لم تجد مصادر كافية فقل ذلك بوضوح في حقل summary واجعل cards مصفوفة فارغة.
+سؤال الطالب: "${topic.trim()}"
+المادة إن وُجدت: ${typeof subject === 'string' ? subject.slice(0, 100) : 'غير محددة'}
+الصف الدراسي: ${typeof grade === 'string' ? grade.slice(0, 100) : 'غير محدد'}
 
-    // Primary: gemini-3.1-flash-lite (fast and free-tier friendly)
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
-        contents: promptText,
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.5,
-        },
+أعد JSON فقط، دون Markdown، بهذا الشكل:
+{
+  "summary": "إجابة مباشرة وواضحة عن سؤال الطالب، مبنية على نتائج البحث",
+  "cards": [
+    {
+      "title": "الفكرة أو الحقيقة الأولى",
+      "text": "شرح موثق للمعلومة بأسلوب مناسب للصف",
+      "question": "سؤال قصير للتحقق من الفهم",
+      "options": ["اختيار صحيح", "اختيار خاطئ", "اختيار خاطئ"],
+      "answer": 0,
+      "explanation": "توضيح الإجابة الصحيحة اعتمادًا على المعلومة الموثقة"
+    }
+  ]
+}
+أنشئ من بطاقة إلى ثلاث بطاقات فقط عندما تدعمها المصادر. answer فهرس من 0 إلى 2. لا تضع روابط داخل JSON؛ سيعرض التطبيق المراجع التي أعادها البحث منفصلة.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: promptText,
+      config: {
+        tools: [{ googleSearch: {} }],
+        temperature: 0.2,
+      },
+    });
+    const candidate = response.candidates?.[0];
+    const rawText = response.text || '';
+    const webSources = (candidate?.groundingMetadata?.groundingChunks || [])
+      .flatMap((chunk) => chunk.web?.uri ? [{ title: chunk.web.title || chunk.web.domain || 'مصدر تعليمي', url: chunk.web.uri }] : []);
+    const trustedSources = [...new Map(webSources.filter((source) => {
+      try {
+        const url = new URL(source.url);
+        if (url.protocol !== 'https:') return false;
+        const host = url.hostname.toLowerCase().replace(/^www\./, '');
+        return host.endsWith('.gov') ||
+          host.endsWith('.edu') ||
+          host.endsWith('.gov.eg') ||
+          host.endsWith('.edu.eg') ||
+          host.endsWith('.ac.uk') ||
+          host.endsWith('.int') ||
+          host === 'unesco.org' ||
+          host.endsWith('.unesco.org') ||
+          host === 'un.org' ||
+          host.endsWith('.un.org');
+      } catch {
+        return false;
+      }
+    }).map((source) => [source.url, source])).values()];
+
+    if (trustedSources.length === 0) {
+      return res.status(502).json({
+        error: 'لم يعثر البحث على مرجع رسمي أو تعليمي موثوق لهذا السؤال. جرّب صياغة السؤال بشكل أوضح.',
       });
-      rawText = response.text || '';
-    } catch (primaryErr: any) {
-      console.warn('Primary flash-lite blackboard card call failed, trying gemini-3.8-flash:', primaryErr.message);
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: promptText,
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.5,
-        },
-      });
-      rawText = response.text || '';
     }
 
-    let data;
+    let data: { summary?: unknown; cards?: unknown };
     try {
       data = JSON.parse(rawText);
     } catch {
@@ -397,16 +572,37 @@ app.post('/api/gemini/lesson-cards', async (req: Request, res: Response) => {
       data = match ? JSON.parse(match[0]) : null;
     }
 
-    if (!data || !data.cards || !Array.isArray(data.cards) || data.cards.length === 0) {
-      throw new Error('Invalid JSON cards structure');
+    if (
+      !data ||
+      typeof data.summary !== 'string' ||
+      !Array.isArray(data.cards) ||
+      data.cards.length === 0 ||
+      data.cards.length > 3 ||
+      data.cards.some((card) =>
+        !card ||
+        typeof card.title !== 'string' ||
+        typeof card.text !== 'string' ||
+        typeof card.question !== 'string' ||
+        !Array.isArray(card.options) ||
+        card.options.length !== 3 ||
+        !card.options.every((option: unknown) => typeof option === 'string') ||
+        !Number.isInteger(card.answer) ||
+        card.answer < 0 ||
+        card.answer > 2 ||
+        typeof card.explanation !== 'string'
+      )
+    ) {
+      return res.status(502).json({
+        error: 'تعذر إعداد إجابة تعليمية موثقة من نتائج البحث. أعد صياغة السؤال وحاول مرة أخرى.',
+      });
     }
 
-    res.json(data);
-  } catch (error: any) {
-    console.warn('Falling back to guaranteed curated lesson cards for topic:', topic, error?.message);
-    // Instant high quality fallback so user NEVER experiences a broken blackboard
-    const fallbackData = getCuratedLessonCards(topic, subject, grade);
-    res.json(fallbackData);
+    return res.json({ ...data, sources: trustedSources, grounded: true });
+  } catch (error) {
+    console.error('تعذر إنشاء إجابة السبورة بالاعتماد على بحث Google.', error);
+    return res.status(502).json({
+      error: 'تعذر البحث في المصادر التعليمية الآن. تحقق من اتصال الخادم وإعداد GEMINI_API_KEY ثم حاول مرة أخرى.',
+    });
   }
 });
 

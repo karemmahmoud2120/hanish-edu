@@ -26,6 +26,8 @@ import {
   Eye,
   Globe2,
   Info,
+  Video,
+  Link2,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -103,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
+      <header className="platform-header sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
           {/* Zone 1: Wordmark Brand */}
           <div
@@ -136,6 +138,18 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
+              onClick={() => setCurrentTab('useful-links')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                currentTab === 'useful-links'
+                  ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-extrabold'
+                  : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Link2 className="w-4 h-4 text-teal-600" />
+              <span>روابط تهمك</span>
+            </button>
+
+            <button
               onClick={() => setCurrentTab('know-your-country')}
               className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 currentTab === 'know-your-country'
@@ -157,6 +171,18 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Info className="w-4 h-4 text-teal-600" />
               <span>من نحن</span>
+            </button>
+
+            <button
+              onClick={() => setCurrentTab('platform-tour')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                currentTab === 'platform-tour'
+                  ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-extrabold'
+                  : 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Video className="w-4 h-4 text-teal-600" />
+              <span>جولة المنصة</span>
             </button>
 
             <button
@@ -282,7 +308,9 @@ export const Header: React.FC<HeaderProps> = ({
                         ? '🎒 طالب'
                         : currentUser.role === 'parent'
                         ? '👨‍👩‍👧 ولي أمر'
-                        : '👑 مدير المنصة (Admin)'}
+                        : currentUser.accountType === 'supervisor'
+                        ? currentUser.supervisorTitle || 'مشرف'
+                        : 'مدير المنصة (Admin)'}
                     </span>
                   </div>
 
@@ -315,6 +343,8 @@ export const Header: React.FC<HeaderProps> = ({
                             ? 'طالب مسجل'
                             : currentUser.role === 'parent'
                             ? 'ولي أمر'
+                            : currentUser.accountType === 'supervisor'
+                            ? currentUser.supervisorTitle || 'مشرف'
                             : 'مدير المنصة (Super Admin)'}
                         </span>
                       </div>
@@ -458,6 +488,14 @@ export const Header: React.FC<HeaderProps> = ({
             المناهج
           </button>
           <button
+            onClick={() => setCurrentTab('useful-links')}
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
+              currentTab === 'useful-links' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            روابط تهمك
+          </button>
+          <button
             onClick={() => setCurrentTab('know-your-country')}
             className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
               currentTab === 'know-your-country' ? 'bg-amber-600 text-white' : 'text-slate-600 dark:text-slate-300'
@@ -472,6 +510,14 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             من نحن
+          </button>
+          <button
+            onClick={() => setCurrentTab('platform-tour')}
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 ${
+              currentTab === 'platform-tour' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            جولة المنصة
           </button>
           <button
             onClick={() => setCurrentTab('ai-tutor')}

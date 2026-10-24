@@ -26,6 +26,7 @@ import {
 } from '../utils/notificationService';
 
 interface ToastNotificationCenterProps {
+  userId: string;
   notifications: NotificationItem[];
   setNotifications: React.Dispatch<React.SetStateAction<NotificationItem[]>>;
   activeToast: NotificationItem | null;
@@ -36,6 +37,7 @@ interface ToastNotificationCenterProps {
 }
 
 export const ToastNotificationCenter: React.FC<ToastNotificationCenterProps> = ({
+  userId,
   notifications,
   setNotifications,
   activeToast,
@@ -44,7 +46,7 @@ export const ToastNotificationCenter: React.FC<ToastNotificationCenterProps> = (
   isOpenDrawer,
   setIsOpenDrawer,
 }) => {
-  const [settings, setSettings] = useState<NotificationSettings>(getNotificationSettings);
+  const [settings, setSettings] = useState<NotificationSettings>(() => getNotificationSettings(userId));
   const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>(() => {
     return 'Notification' in window ? Notification.permission : 'denied';
   });
@@ -54,7 +56,7 @@ export const ToastNotificationCenter: React.FC<ToastNotificationCenterProps> = (
     if (!activeToast) return;
 
     // Play chime and send browser notification
-    playNotificationChime();
+    playNotificationChime(userId);
     dispatchNativeBrowserNotification(activeToast.title, activeToast.body, activeToast.id);
 
     const timer = setTimeout(() => {
@@ -62,16 +64,16 @@ export const ToastNotificationCenter: React.FC<ToastNotificationCenterProps> = (
     }, 7000);
 
     return () => clearTimeout(timer);
-  }, [activeToast]);
+  }, [activeToast, userId]);
 
   const handleRequestPermission = async () => {
-    const granted = await requestBrowserNotificationPermission();
+    const granted = await requestBrowserNotificationPermission(userId);
     if ('Notification' in window) {
       setPermissionStatus(Notification.permission);
     }
     const updated = { ...settings, browserNotificationsEnabled: granted };
     setSettings(updated);
-    saveNotificationSettings(updated);
+    saveNotificationSettings(userId, updated);
 
     if (granted) {
       // Trigger a success toast
@@ -92,9 +94,9 @@ export const ToastNotificationCenter: React.FC<ToastNotificationCenterProps> = (
     const nextVal = !settings.soundEnabled;
     const updated = { ...settings, soundEnabled: nextVal };
     setSettings(updated);
-    saveNotificationSettings(updated);
+    saveNotificationSettings(userId, updated);
     if (nextVal) {
-      playNotificationChime();
+      playNotificationChime(userId);
     }
   };
 
@@ -119,14 +121,14 @@ export const ToastNotificationCenter: React.FC<ToastNotificationCenterProps> = (
   const handleMarkAllAsRead = () => {
     setNotifications((prev) => {
       const updated = prev.map((n) => ({ ...n, read: true }));
-      saveNotifications(updated);
+      saveNotifications(userId, updated);
       return updated;
     });
   };
 
   const handleClearAll = () => {
     setNotifications([]);
-    saveNotifications([]);
+    saveNotifications(userId, []);
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;

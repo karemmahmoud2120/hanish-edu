@@ -6,9 +6,25 @@ const STORAGE_KEY_SESSIONS = 'hanish_scheduled_sessions';
 const STORAGE_KEY_SETTINGS = 'hanish_notification_settings';
 const STORAGE_KEY_DEADLINES_NOTIFIED = 'hanish_notified_deadlines';
 
+const getUserStorageKey = (key: string, userId: string) => `${key}_${userId}`;
+
+const migrateLegacyValue = (key: string, userId: string): string | null => {
+  const userKey = getUserStorageKey(key, userId);
+  const saved = localStorage.getItem(userKey);
+  if (saved !== null) return saved;
+
+  const migrationKey = `${key}_legacy_migrated`;
+  if (localStorage.getItem(migrationKey) === 'true') return null;
+
+  const legacyValue = localStorage.getItem(key);
+  if (legacyValue !== null) localStorage.setItem(userKey, legacyValue);
+  localStorage.setItem(migrationKey, 'true');
+  return legacyValue;
+};
+
 // Get default or stored settings
-export const getNotificationSettings = (): NotificationSettings => {
-  const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
+export const getNotificationSettings = (userId: string): NotificationSettings => {
+  const saved = migrateLegacyValue(STORAGE_KEY_SETTINGS, userId);
   if (saved) {
     try {
       return JSON.parse(saved);
@@ -22,20 +38,20 @@ export const getNotificationSettings = (): NotificationSettings => {
   };
 };
 
-export const saveNotificationSettings = (settings: NotificationSettings) => {
-  localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+export const saveNotificationSettings = (userId: string, settings: NotificationSettings) => {
+  localStorage.setItem(getUserStorageKey(STORAGE_KEY_SETTINGS, userId), JSON.stringify(settings));
 };
 
 // Request Browser Notification Permission
-export const requestBrowserNotificationPermission = async (): Promise<boolean> => {
+export const requestBrowserNotificationPermission = async (userId: string): Promise<boolean> => {
   if (!('Notification' in window)) {
     return false;
   }
   try {
     const permission = await Notification.requestPermission();
     const granted = permission === 'granted';
-    const settings = getNotificationSettings();
-    saveNotificationSettings({ ...settings, browserNotificationsEnabled: granted });
+    const settings = getNotificationSettings(userId);
+    saveNotificationSettings(userId, { ...settings, browserNotificationsEnabled: granted });
     return granted;
   } catch (error) {
     console.error('Error requesting notification permission:', error);
@@ -44,8 +60,8 @@ export const requestBrowserNotificationPermission = async (): Promise<boolean> =
 };
 
 // Synthesize pleasant acoustic chime using Web Audio API
-export const playNotificationChime = () => {
-  const settings = getNotificationSettings();
+export const playNotificationChime = (userId: string) => {
+  const settings = getNotificationSettings(userId);
   if (!settings.soundEnabled) return;
 
   try {
@@ -103,8 +119,8 @@ export const dispatchNativeBrowserNotification = (title: string, body: string, i
 };
 
 // Load all notifications from local storage
-export const getStoredNotifications = (): NotificationItem[] => {
-  const saved = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
+export const getStoredNotifications = (userId: string): NotificationItem[] => {
+  const saved = migrateLegacyValue(STORAGE_KEY_NOTIFICATIONS, userId);
   if (saved) {
     try {
       return JSON.parse(saved);
@@ -116,13 +132,13 @@ export const getStoredNotifications = (): NotificationItem[] => {
 };
 
 // Save notifications to local storage
-export const saveNotifications = (notifications: NotificationItem[]) => {
-  localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(notifications.slice(0, 40)));
+export const saveNotifications = (userId: string, notifications: NotificationItem[]) => {
+  localStorage.setItem(getUserStorageKey(STORAGE_KEY_NOTIFICATIONS, userId), JSON.stringify(notifications.slice(0, 40)));
 };
 
 // Load scheduled study sessions
-export const getScheduledStudySessions = (): ScheduledStudySession[] => {
-  const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
+export const getScheduledStudySessions = (userId: string): ScheduledStudySession[] => {
+  const saved = migrateLegacyValue(STORAGE_KEY_SESSIONS, userId);
   if (saved) {
     try {
       return JSON.parse(saved);
@@ -134,12 +150,22 @@ export const getScheduledStudySessions = (): ScheduledStudySession[] => {
 };
 
 // Save scheduled study sessions
-export const saveScheduledStudySessions = (sessions: ScheduledStudySession[]) => {
-  localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
+export const saveScheduledStudySessions = (userId: string, sessions: ScheduledStudySession[]) => {
+  localStorage.setItem(getUserStorageKey(STORAGE_KEY_SESSIONS, userId), JSON.stringify(sessions));
+};
+
+export const clearUserNotificationData = (userId: string) => {
+  [
+    STORAGE_KEY_NOTIFICATIONS,
+    STORAGE_KEY_SESSIONS,
+    STORAGE_KEY_SETTINGS,
+    STORAGE_KEY_DEADLINES_NOTIFIED,
+  ].forEach((key) => localStorage.removeItem(getUserStorageKey(key, userId)));
 };
 
 // Add a scheduled study session
 export const addScheduledStudySession = (
+  userId: string,
   title: string,
   targetTime: number,
   durationMinutes: number = 25,
@@ -154,21 +180,22 @@ export const addScheduledStudySession = (
     notified: false,
   };
 
-  const sessions = getScheduledStudySessions();
+  const sessions = getScheduledStudySessions(userId);
   const updated = [...sessions, newSession];
-  saveScheduledStudySessions(updated);
+  saveScheduledStudySessions(userId, updated);
   return newSession;
 };
 
 // Remove a scheduled study session
-export const removeScheduledStudySession = (sessionId: string) => {
-  const sessions = getScheduledStudySessions();
+export const removeScheduledStudySession = (userId: string, sessionId: string) => {
+  const sessions = getScheduledStudySessions(userId);
   const updated = sessions.filter((s) => s.id !== sessionId);
-  saveScheduledStudySessions(updated);
+  saveScheduledStudySessions(userId, updated);
 };
 
 // Check for approaching task deadlines
 export const checkTaskDeadlines = (
+  userId: string,
   tasks: StudyTask[],
   onTriggerNotification: (item: NotificationItem) => void
 ) => {
@@ -180,7 +207,9 @@ export const checkTaskDeadlines = (
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
   // Track which tasks were already notified today to prevent spamming
-  const notifiedMap = JSON.parse(localStorage.getItem(STORAGE_KEY_DEADLINES_NOTIFIED) || '{}');
+  const notifiedMap = JSON.parse(
+    migrateLegacyValue(STORAGE_KEY_DEADLINES_NOTIFIED, userId) || '{}'
+  );
   let hasChanges = false;
 
   tasks.forEach((task) => {
@@ -227,15 +256,16 @@ export const checkTaskDeadlines = (
   });
 
   if (hasChanges) {
-    localStorage.setItem(STORAGE_KEY_DEADLINES_NOTIFIED, JSON.stringify(notifiedMap));
+    localStorage.setItem(getUserStorageKey(STORAGE_KEY_DEADLINES_NOTIFIED, userId), JSON.stringify(notifiedMap));
   }
 };
 
 // Check upcoming scheduled study sessions
 export const checkScheduledStudySessions = (
+  userId: string,
   onTriggerNotification: (item: NotificationItem) => void
 ) => {
-  const sessions = getScheduledStudySessions();
+  const sessions = getScheduledStudySessions(userId);
   const now = Date.now();
   let hasChanges = false;
 
@@ -263,6 +293,6 @@ export const checkScheduledStudySessions = (
   });
 
   if (hasChanges) {
-    saveScheduledStudySessions(updated);
+    saveScheduledStudySessions(userId, updated);
   }
 };

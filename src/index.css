@@ -1,12 +1,207 @@
 @import "tailwindcss";
 
+:root {
+  --brand-primary: #0f766e;
+  --brand-primary-strong: #115e59;
+  --brand-accent: #d6a84f;
+  --brand-ink: #102a43;
+  --brand-surface: #ffffff;
+  --brand-border: rgba(15, 118, 110, 0.14);
+}
+
+html.dark {
+  --brand-primary: #2dd4bf;
+  --brand-primary-strong: #14b8a6;
+  --brand-accent: #f2c46d;
+  --brand-ink: #e2e8f0;
+  --brand-surface: #0f172a;
+  --brand-border: rgba(45, 212, 191, 0.18);
+}
+
 @layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
   body {
     font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(circle at top, rgba(16, 185, 129, 0.12), transparent 25%),
+      linear-gradient(180deg, #f8fafc 0%, #eefaf5 100%);
+  }
+  html.dark body {
+    background:
+      radial-gradient(circle at top, rgba(45, 212, 191, 0.1), transparent 22%),
+      linear-gradient(180deg, #020817 0%, #0f172a 100%);
+  }
+  :focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 3px;
+  }
+
+  .platform-shell {
+    background-color: var(--brand-surface);
+    transition: background-color 240ms ease, color 240ms ease;
+  }
+
+  .platform-header {
+    box-shadow: 0 8px 28px rgba(16, 42, 67, 0.045);
+    border-bottom-color: var(--brand-border);
+  }
+
+  .platform-header .text-emerald-600,
+  .platform-header .text-emerald-700 {
+    color: var(--brand-primary);
+  }
+
+  .platform-header .bg-emerald-50 {
+    background-color: color-mix(in srgb, var(--brand-primary) 9%, transparent);
+  }
+
+  .platform-header .bg-emerald-600 {
+    background-color: var(--brand-primary);
+  }
+
+  html.dark .platform-header {
+    box-shadow: 0 8px 28px rgba(2, 8, 23, 0.22);
+  }
+
+  .student-welcome-hero {
+    background:
+      radial-gradient(circle at 12% 12%, rgba(45, 212, 191, 0.24), transparent 28%),
+      radial-gradient(circle at 90% 88%, rgba(214, 168, 79, 0.13), transparent 26%),
+      linear-gradient(125deg, #102a43 0%, #123d4c 52%, #0f766e 120%);
+    border-color: rgba(45, 212, 191, 0.24);
+    box-shadow: 0 24px 70px rgba(16, 42, 67, 0.18);
+  }
+
+  .student-welcome-hero .bg-emerald-500\/15 {
+    background-color: rgba(45, 212, 191, 0.16);
+  }
+
+  .student-welcome-hero .bg-teal-500\/15 {
+    background-color: rgba(214, 168, 79, 0.14);
+  }
+
+  .admin-console-hero {
+    background:
+      radial-gradient(circle at 8% 10%, rgba(45, 212, 191, 0.2), transparent 30%),
+      radial-gradient(circle at 92% 85%, rgba(214, 168, 79, 0.13), transparent 24%),
+      linear-gradient(125deg, #102a43, #123d4c 58%, #0f766e);
+    border-color: rgba(45, 212, 191, 0.2);
+    box-shadow: 0 24px 70px rgba(16, 42, 67, 0.16);
+  }
+
+  .admin-console-hero .bg-purple-500\/20 {
+    background-color: rgba(45, 212, 191, 0.14);
+  }
+
+  .admin-console-hero .text-purple-300,
+  .admin-console-hero .text-amber-400 {
+    color: #b9f3e8;
+  }
+
+  .account-management-panel {
+    box-shadow: 0 18px 52px rgba(16, 42, 67, 0.07);
+  }
+
+  .admin-cms-nav {
+    border: 1px solid var(--brand-border);
+  }
+
+  .admin-cms-nav button[class*="shadow"] {
+    color: var(--brand-primary);
+    box-shadow: 0 4px 14px rgba(16, 42, 67, 0.08);
+  }
+
+  html.dark .account-management-panel {
+    box-shadow: 0 18px 52px rgba(2, 8, 23, 0.25);
   }
   h1, h2, h3, h4, .font-heading {
     font-family: 'Cairo', 'Tajawal', -apple-system, BlinkMacSystemFont, sans-serif;
   }
+}
+
+.soft-auth-grid {
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(30, 41, 59, 0.06));
+}
+
+.soft-auth-shell {
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 28px 80px rgba(9, 14, 28, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  backdrop-filter: blur(16px);
+}
+
+html.dark .soft-auth-shell {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(148, 163, 184, 0.2);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.7);
+}
+
+.auth-role-pill {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(240, 253, 250, 0.9));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+html.dark .auth-role-pill {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9));
+  border-color: rgba(148, 163, 184, 0.12);
+}
+
+.social-button {
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.social-button:hover {
+  transform: translateY(-1px);
+}
+
+.social-button:before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.2) 40%, transparent 100%);
+  transform: translateX(-120%);
+  transition: transform 400ms ease;
+}
+
+.social-button:hover:before {
+  transform: translateX(120%);
+}
+
+.social-button.google {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(239, 246, 255, 0.9));
+  border: 1px solid rgba(59, 130, 246, 0.18);
+}
+
+.social-button.facebook {
+  background: linear-gradient(135deg, rgba(20, 86, 201, 0.9), rgba(37, 99, 235, 0.9));
+  border: 1px solid rgba(37, 99, 235, 0.3);
+}
+
+html.dark .social-button.google {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9));
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.supervisor-permissions {
+  background: linear-gradient(135deg, rgba(147, 51, 234, 0.06), rgba(59, 130, 246, 0.05));
+  border: 1px solid rgba(168, 85, 247, 0.15);
+}
+
+.permission-chip {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(250, 245, 255, 0.8));
+  border: 1px solid rgba(168, 85, 247, 0.18);
+}
+
+html.dark .permission-chip {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(88, 28, 135, 0.2));
+  border-color: rgba(168, 85, 247, 0.2);
 }
 
 /* Custom scrollbar for chat and code panels */
@@ -149,4 +344,46 @@ html.night-focus .theme-bg-minimal {
   background-color: #070c18 !important;
 }
 
+.tour-screen {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(45, 212, 191, 0.09), transparent 30%),
+    linear-gradient(135deg, #f8fafc, #eef7f5 55%, #f7f4ec);
+  animation: tour-scene-enter 420ms ease both;
+}
 
+html.dark .tour-screen {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(45, 212, 191, 0.12), transparent 30%),
+    linear-gradient(135deg, #0b1220, #102a35 55%, #171d2a);
+}
+
+.tour-preview-card {
+  animation: tour-preview-float 5s ease-in-out infinite;
+}
+
+@keyframes tour-scene-enter {
+  from {
+    opacity: 0.65;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tour-preview-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-screen,
+  .tour-preview-card {
+    animation: none;
+  }
+}

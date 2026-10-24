@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { STAGES, SUBJECTS_BY_STAGE, LessonItem, BookletItem, QuizItem } from '../data/curriculumData';
+import { STAGES, SUBJECTS_BY_STAGE, LessonItem, BookletItem, QuizItem, getQuizPassingPercentage } from '../data/curriculumData';
 import { Play, FileText, CheckCircle2, Clock, ThumbsUp, Eye, Download, MessageSquare, Award, ArrowRight, Check, X, RotateCcw } from 'lucide-react';
 
 interface CurriculumExplorerProps {
@@ -32,6 +32,7 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [quizFinished, setQuizFinished] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
+  const [quizPage, setQuizPage] = useState(0);
 
   // Identify current stage from selected grade
   const currentStage = STAGES.find((s) => (s.years as readonly string[]).includes(selectedGrade)) || STAGES[1];
@@ -55,6 +56,10 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
     const matchesSubject = selectedSubject === 'all' || q.subject === selectedSubject;
     return matchesGrade && matchesSubject;
   });
+  const quizResultPercentage = activeQuiz
+    ? Math.round((quizScore / activeQuiz.questions.length) * 100)
+    : 0;
+  const quizPassingPercentage = activeQuiz ? getQuizPassingPercentage(activeQuiz) : 0;
 
   // Handle like toggle
   const handleLikeLesson = (lessonId: string) => {
@@ -95,6 +100,7 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
   // Quiz submission
   const handleFinishQuiz = () => {
     if (!activeQuiz) return;
+    if (!activeQuiz.questions.every((question) => quizAnswers[question.id] !== undefined)) return;
     let calculatedScore = 0;
     activeQuiz.questions.forEach((q) => {
       if (quizAnswers[q.id] === q.correctIndex) {
@@ -390,6 +396,7 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
                         setQuizAnswers({});
                         setQuizFinished(false);
                         setQuizScore(0);
+                        setQuizPage(0);
                       }}
                       className="w-full py-3.5 rounded-2xl bg-gradient-to-l from-blue-600 to-indigo-600 text-white font-extrabold text-sm shadow hover:opacity-95 transition cursor-pointer flex items-center justify-center gap-2"
                     >
@@ -423,7 +430,7 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
 
               {/* Quiz Questions List */}
               <div className="space-y-6">
-                {activeQuiz.questions.map((q, qIndex) => {
+                {activeQuiz.questions.slice(quizPage, quizPage + 1).map((q) => {
                   const userAnswer = quizAnswers[q.id];
                   return (
                     <div
@@ -431,7 +438,7 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
                       className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 space-y-3"
                     >
                       <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                        س {qIndex + 1}: {q.question}
+                        س {quizPage + 1}: {q.question}
                       </h4>
 
                       <div className="grid sm:grid-cols-2 gap-2.5">
@@ -476,15 +483,58 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
               </div>
 
               {/* Submit or Result Action */}
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                {!quizFinished ? (
+              <div className="space-y-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-500">
                   <button
-                    onClick={handleFinishQuiz}
-                    disabled={Object.keys(quizAnswers).length === 0}
-                    className="px-8 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow transition disabled:opacity-50 cursor-pointer"
+                    type="button"
+                    onClick={() => setQuizPage((page) => Math.max(0, page - 1))}
+                    disabled={quizPage === 0}
+                    className="rounded-xl bg-slate-100 px-4 py-2 text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
-                    تسليم الامتحان واعتماد النتيجة ✅
+                    السؤال السابق
                   </button>
+                  <div className="min-w-0 flex-1 text-center">
+                    <span>صفحة {quizPage + 1} من {activeQuiz.questions.length}</span>
+                    <div className="mx-auto mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div className="h-full rounded-full bg-teal-600 transition-all" style={{ width: `${((quizPage + 1) / activeQuiz.questions.length) * 100}%` }} />
+                    </div>
+                  </div>
+                  {!quizFinished && quizPage < activeQuiz.questions.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setQuizPage((page) => Math.min(activeQuiz.questions.length - 1, page + 1))}
+                      className="rounded-xl bg-teal-700 px-4 py-2 text-white transition hover:bg-teal-600"
+                    >
+                      السؤال التالي
+                    </button>
+                  )}
+                  {quizFinished && quizPage < activeQuiz.questions.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setQuizPage((page) => Math.min(activeQuiz.questions.length - 1, page + 1))}
+                      className="rounded-xl bg-teal-700 px-4 py-2 text-white transition hover:bg-teal-600"
+                    >
+                      السؤال التالي
+                    </button>
+                  )}
+                </div>
+                {!quizFinished ? (
+                  quizPage === activeQuiz.questions.length - 1 && (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-xs text-slate-500">
+                        {activeQuiz.questions.every((question) => quizAnswers[question.id] !== undefined)
+                          ? 'تمت الإجابة عن جميع الأسئلة، يمكنك التسليم.'
+                          : `أجبت عن ${Object.keys(quizAnswers).length} من ${activeQuiz.questions.length} سؤالًا. أكمل الإجابات قبل التسليم.`}
+                      </p>
+                      <button
+                        onClick={handleFinishQuiz}
+                        disabled={!activeQuiz.questions.every((question) => quizAnswers[question.id] !== undefined)}
+                        className="rounded-2xl bg-emerald-600 px-8 py-3 text-sm font-extrabold text-white shadow transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        تسليم الامتحان واعتماد النتيجة ✅
+                      </button>
+                    </div>
+                  )
                 ) : (
                   <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-4">
                     <div className="text-sm font-bold text-slate-800 dark:text-white">
@@ -492,8 +542,13 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
                       <span className="text-xl font-extrabold text-emerald-600">
                         {quizScore} من {activeQuiz.questions.length}
                       </span>{' '}
-                      (
-                      {Math.round((quizScore / activeQuiz.questions.length) * 100)}%)
+                      ({quizResultPercentage}%)
+                      <span className={`ms-2 rounded-full px-2.5 py-1 text-xs ${quizResultPercentage >= quizPassingPercentage
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                      }`}>
+                        {quizResultPercentage >= quizPassingPercentage ? 'ناجح' : 'تحتاج إلى مراجعة'} · درجة النجاح {quizPassingPercentage}%
+                      </span>
                     </div>
 
                     <div className="flex gap-2">
@@ -502,6 +557,7 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
                           setQuizAnswers({});
                           setQuizFinished(false);
                           setQuizScore(0);
+                          setQuizPage(0);
                         }}
                         className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
                       >
